@@ -1,0 +1,47 @@
+---
+/**
+ * Renders the custom `releases` content collection (src/content/releases).
+ * Each entry is an MDX file whose body is rendered with <Content />.
+ */
+import { getCollection, render } from 'astro:content';
+import { Badge } from '@astrojs/starlight/components';
+
+const semver = (v: string) => v.split('.').map(Number);
+const releases = (await getCollection('releases')).sort((a, b) => {
+	// Newest date first; on the same date, the higher version first.
+	const byDate = b.data.date.getTime() - a.data.date.getTime();
+	if (byDate !== 0) return byDate;
+	const [x, y] = [semver(a.data.version), semver(b.data.version)];
+	for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return y[i] - x[i];
+	return 0;
+});
+const variant = { major: 'danger', minor: 'tip', patch: 'note' } as const;
+const fmt = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' });
+---
+
+<div class="releases">
+	{
+		releases.map(async (release) => {
+			const { Content } = await render(release);
+			return (
+				<article class="release">
+					<header>
+						<h2 id={`v${release.data.version}`}>v{release.data.version}</h2>
+						<Badge text={release.data.type} variant={variant[release.data.type]} />
+						<time datetime={release.data.date.toISOString()}>{fmt.format(release.data.date)}</time>
+					</header>
+					<p class="summary">{release.data.summary}</p>
+					<Content />
+				</article>
+			);
+		})
+	}
+</div>
+
+<style>
+	.release { padding-block: 0.5rem 1.5rem; border-bottom: 1px solid var(--sl-color-hairline); }
+	.release header { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+	.release h2 { margin: 0; }
+	time { margin-left: auto; color: var(--sl-color-gray-3); font-size: var(--sl-text-sm); }
+	.summary { color: var(--sl-color-gray-2); }
+</style>

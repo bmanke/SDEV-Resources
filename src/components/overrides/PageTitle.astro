@@ -1,0 +1,52 @@
+---
+/**
+ * Override of Starlight's <PageTitle>.
+ * Renders the default title, then a metadata row driven by the custom
+ * frontmatter fields defined in src/content.config.ts.
+ */
+import Default from '@astrojs/starlight/components/PageTitle.astro';
+
+const { difficulty, readingTime, tags = [] } = Astro.locals.starlightRoute.entry.data;
+const hasMeta = Boolean(difficulty || readingTime || tags.length);
+---
+
+<Default><slot /></Default>
+
+{
+	hasMeta && (
+		<div class="page-meta">
+			{difficulty && <span class={`pill pill--${difficulty}`}>{difficulty}</span>}
+			{readingTime && <span class="meta-item">{readingTime} min read</span>}
+			{tags.map((tag) => (
+				<span class="tag">#{tag}</span>
+			))}
+		</div>
+	)
+}
+
+<style>
+	.page-meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem 0.75rem;
+		margin-top: 0.75rem;
+		font-size: var(--sl-text-sm);
+		color: var(--sl-color-gray-3);
+	}
+	.pill {
+		text-transform: capitalize;
+		font-weight: 600;
+		padding: 0.1rem 0.6rem;
+		border-radius: 999px;
+		border: 1px solid currentColor;
+	}
+	.pill--beginner { color: var(--sl-color-green); }
+	.pill--intermediate { color: var(--sl-color-orange); }
+	.pill--advanced { color: var(--sl-color-red); }
+	.tag {
+		font-family: var(--sl-font-mono);
+		font-size: var(--sl-text-xs);
+		color: var(--sl-color-gray-2);
+	}
+</style>

@@ -1,0 +1,58 @@
+[
+  {
+    "label": "Day 01: Introduction",
+    "dir": "getting-started/programming-fundamentals/day-01-introduction"
+  },
+  {
+    "label": "Day 02: Math and Data Types",
+    "dir": "getting-started/programming-fundamentals/day-02-math-and-data-types"
+  },
+  {
+    "label": "Day 04: Conditionals, Part 1",
+    "dir": "getting-started/programming-fundamentals/day-04-conditionals-part-1"
+  },
+  {
+    "label": "Day 05: Conditionals, Part 2",
+    "dir": "getting-started/programming-fundamentals/day-05-conditionals-part-2"
+  },
+  {
+    "label": "Day 06: Match Case",
+    "dir": "getting-started/programming-fundamentals/day-06-match-case"
+  },
+  {
+    "label": "Lists",
+    "dir": "getting-started/programming-fundamentals/lists"
+  },
+  {
+    "label": "Debugging",
+    "dir": "getting-started/programming-fundamentals/debugging"
+  },
+  {
+    "label": "Loops and Exceptions",
+    "dir": "getting-started/programming-fundamentals/loops-and-exceptions"
+  },
+  {
+    "label": "Functions and Modules",
+    "dir": "getting-started/programming-fundamentals/functions-and-modules"
+  },
+  {
+    "label": "Dictionaries",
+    "dir": "getting-started/programming-fundamentals/dictionaries"
+  },
+  {
+    "label": "Files and CSV",
+    "dir": "getting-started/programming-fundamentals/files-and-csv"
+  },
+  {
+    "label": "Classes and Objects",
+    "dir": "getting-started/programming-fundamentals/classes-and-objects"
+  },
+  {
+    "label": "Inheritance",
+    "dir": "getting-started/programming-fundamentals/inheritance"
+  },
+  {
+    "label": "Packages, Jupyter and Flask",
+    "dir": "getting-started/programming-fundamentals/packages-jupyter-and-flask"
+  }
+]
