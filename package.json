@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "astro build",
+    "build": "astro build && node scripts/prefix-base.mjs",
     "preview": "astro preview",
     "build:portable": "astro build && node scripts/relativize.mjs",
     "check": "astro check --minimumSeverity warning",
