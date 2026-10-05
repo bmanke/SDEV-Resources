@@ -26,10 +26,10 @@ export default defineConfig({
 			},
 			favicon: '/favicon.svg',
 			social: [
-				{ icon: 'github', label: 'GitHub', href: 'https://github.com/bmanke/sdev-resources' },
+				{ icon: 'github', label: 'GitHub', href: 'https://github.com/bmanke/SDEV-Resources' },
 			],
 			editLink: {
-				baseUrl: "https://github.com/bmanke/sdev-resources/edit/main/",
+				baseUrl: "https://github.com/bmanke/SDEV-Resources/edit/main/",
 			},
 			lastUpdated: true,
 			customCss: [
@@ -78,10 +78,6 @@ export default defineConfig({
 						{
 							label: 'SDEV-2150 Intermediate Frontend',
 							items: [
-								{
-									label: 'Assignment 1',
-									items: [{ autogenerate: { directory: 'sdev-2150-intermediate-frontend/assignment-1' } }],
-								},
 								{
 									label: 'Exercises',
 									items: [{ autogenerate: { directory: 'sdev-2150-intermediate-frontend/exercises' } }],
