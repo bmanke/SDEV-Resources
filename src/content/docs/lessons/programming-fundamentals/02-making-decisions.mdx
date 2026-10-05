@@ -1,0 +1,184 @@
+---
+title: "2. Making Decisions with if"
+description: "Use comparisons, logical operators and if/elif/else to make your programs choose."
+difficulty: beginner
+readingTime: 12
+tags: [python, conditionals]
+sidebar:
+  order: 2
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Programs become useful when they can react to data. An `if` statement runs a block of code only when a condition is true.
+
+## Booleans and comparisons
+
+A comparison produces a `bool`, which is either `True` or `False`.
+
+| Operator | Meaning |
+| -------- | ------- |
+| `==` | equal to |
+| `!=` | not equal to |
+| `<` `>` `<=` `>=` | less / greater than (or equal) |
+| `in` | is this item inside that collection? |
+
+```python
+age = 17
+print(age >= 18)            # False
+print("a" in "banana")      # True
+print(18 <= age < 65)       # False. Python allows chained comparisons.
+```
+
+<Aside type="caution" title="One equals sign or two?">
+`=` **assigns** a value. `==` **compares** two values. Writing `if age = 18:` is a syntax error.
+</Aside>
+
+## Logical operators
+
+Combine conditions with `and`, `or` and `not`.
+
+```python
+is_member = True
+has_ticket = False
+
+print(is_member and has_ticket)   # False: both must be true
+print(is_member or has_ticket)    # True:  at least one is true
+print(not has_ticket)             # True:  flips the value
+```
+
+## if, elif and else
+
+```python title="concert.py"
+concert = input("Which concert are you at? ").lower()   # .lower() ignores capitals
+has_ticket = input("Do you have a ticket? (yes/no) ").lower() == "yes"
+
+if concert == "taylor swift" and has_ticket:
+    print("Welcome in!")
+elif concert == "taylor swift":
+    print("You need a ticket to get in.")
+else:
+    print("You are at the wrong concert.")
+```
+
+Rules to remember:
+
+- The line ends with a colon, and the block underneath is **indented** (four spaces is the convention). Indentation is how Python knows what belongs to the `if`.
+- Python checks conditions from top to bottom and runs **only the first** one that is true.
+- `elif` and `else` are optional. `else` has no condition. It catches everything left over.
+
+### Order matters
+
+```python
+score = 95
+
+if score >= 60:
+    grade = "D"      # 95 matches here first, so the better grades below never run!
+elif score >= 90:
+    grade = "A"
+```
+
+Put the most specific (highest) condition first:
+
+```python
+score = 95
+
+if score >= 90:
+    grade = "A"
+elif score >= 80:
+    grade = "B"
+elif score >= 70:
+    grade = "C"
+elif score >= 60:
+    grade = "D"
+else:
+    grade = "F"
+print(grade)   # A
+```
+
+## Truthiness
+
+Anything can be used as a condition. Empty or zero values count as false: `0`, `0.0`, `""`, `[]`, `{}` and `None`. Everything else is true.
+
+```python
+name = input("Name: ")
+if not name:                       # an empty string is falsy
+    print("You didn't type anything.")
+```
+
+## Nested decisions
+
+You can put an `if` inside another `if`, but flat code is easier to read. Combine conditions with `and` when you can.
+
+```python title="leap_year.py"
+year = int(input("Year: "))
+
+# Divisible by 4, except century years, which must also be divisible by 400.
+if (year % 4 == 0 and year % 100 != 0) or year % 400 == 0:
+    print(f"{year} is a leap year")
+else:
+    print(f"{year} is not a leap year")
+```
+
+## Randomness
+
+The `random` module is handy for games.
+
+```python title="heads_or_tails.py"
+import random
+
+guess = input("heads or tails? ").lower()
+flip = random.choice(["heads", "tails"])     # pick one item at random
+
+if guess == flip:
+    print(f"It was {flip}. You win!")
+else:
+    print(f"It was {flip}. You lose.")
+```
+
+## Check yourself
+
+1. **Ticket price.** Under 5 is free, 5 to 17 is $8, 18 to 64 is $15, 65 and over is $10. Ask for an age and print the price.
+2. **Rock, paper, scissors.** The computer picks with `random.choice`, you type your choice, and the program announces the winner or a tie.
+3. **Spot the bug.** Why does this always say "Adult"?
+
+   ```python
+   age = 10
+   if age > 18 or 65:
+       print("Adult")
+   ```
+
+<details>
+<summary>Solutions</summary>
+
+```python
+# 1
+age = int(input("Age: "))
+if age < 5:
+    price = 0
+elif age < 18:
+    price = 8
+elif age < 65:
+    price = 15
+else:
+    price = 10
+print(f"Ticket: ${price}")
+
+# 2
+import random
+you = input("rock, paper or scissors? ").lower()
+computer = random.choice(["rock", "paper", "scissors"])
+beats = {"rock": "scissors", "paper": "rock", "scissors": "paper"}   # key beats value
+
+if you == computer:
+    print("Tie")
+elif beats[you] == computer:
+    print("You win")
+else:
+    print("Computer wins")
+
+# 3: `or 65` is its own condition, and 65 is always truthy. Compare both sides:
+#    if age > 18 or age > 65:   (or simply  if age > 18:)
+```
+
+</details>

@@ -1,0 +1,472 @@
+---
+title: "8. Authentication"
+description: "Register users, log them in and out, and protect pages with Django's built-in authentication system."
+difficulty: intermediate
+readingTime: 17
+tags: [django, authentication, security, sessions]
+sidebar:
+  order: 8
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+**Authentication** answers "who are you?". **Authorization** (next lesson) answers "what are you allowed to do?".
+Django includes a complete authentication system: a `User` model, secure password hashing, sessions, and ready-made
+login and logout views. You should almost never write your own.
+
+## How it works
+
+1. A visitor submits a username and password.
+2. Django checks the password against a **hash** (the plain password is never stored).
+3. On success Django creates a **session** and sends the browser a session cookie.
+4. On later requests the cookie identifies the session, and Django sets `request.user` to the right user.
+
+`request.user` is always available. For visitors who are not logged in, it is an `AnonymousUser`.
+
+```python
+request.user.is_authenticated      # True / False
+request.user.username
+request.user.is_staff              # can use the admin
+request.user.is_superuser
+```
+
+## A plan for the site
+
+- Anyone can read books.
+- Registered members can post reviews.
+- We need sign up, log in, log out, and a way to protect pages.
+
+Create an `accounts` app for the registration code:
+
+```sh
+python manage.py startapp accounts
+```
+
+Register it in `INSTALLED_APPS` and add the redirect settings:
+
+```python title="bookclub/settings.py (excerpt)"
+INSTALLED_APPS = [
+    # ...the built-in apps...
+    'books',
+    'accounts',
+]
+
+LOGIN_URL = 'login'                      # where @login_required sends visitors
+LOGIN_REDIRECT_URL = 'books:book_list'   # after a successful login
+LOGOUT_REDIRECT_URL = 'books:home'       # after logging out
+```
+
+<Aside type="tip" title="Start with a custom user model">
+Django strongly recommends defining your own user model at the **start** of every project, even if it is empty, because
+changing it later is painful. The pattern is `class User(AbstractUser): pass` in an app, and `AUTH_USER_MODEL = 'accounts.User'`
+in settings, set before the very first `migrate`. This course uses the built-in model to keep the examples simple.
+</Aside>
+
+## Registration
+
+Django provides `UserCreationForm`, which validates the username and checks the password against Django's password rules.
+
+```python title="accounts/views.py"
+from django.contrib import messages
+from django.contrib.auth import login
+from django.contrib.auth.forms import UserCreationForm
+from django.shortcuts import redirect, render
+
+
+def signup(request):
+    if request.user.is_authenticated:
+        return redirect("books:book_list")
+
+    if request.method == "POST":
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save()                  # saves the user with a hashed password
+            login(request, user)                # log them in straight away
+            messages.success(request, f"Welcome, {user.username}!")
+            return redirect("books:book_list")
+    else:
+        form = UserCreationForm()
+    return render(request, "accounts/signup.html", {"form": form})
+```
+
+```python title="accounts/urls.py"
+from django.urls import path
+
+from . import views
+
+urlpatterns = [
+    path("signup/", views.signup, name="signup"),
+]
+```
+
+## Login and logout
+
+Django's `django.contrib.auth.urls` provides these routes: `login/`, `logout/`, `password_change/`, `password_reset/` and more. Include them next to your own:
+
+```python title="bookclub/urls.py"
+from django.contrib import admin
+from django.urls import include, path
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("accounts/", include("accounts.urls")),
+    path("accounts/", include("django.contrib.auth.urls")),
+    path("", include("books.urls")),
+]
+```
+
+The built-in views look for templates in a `registration/` folder:
+
+```jinja title="templates/registration/login.html"
+{% extends "base.html" %}
+
+{% block title %}Log in | Book Club{% endblock %}
+
+{% block content %}
+  <h1>Log in</h1>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <input type="hidden" name="next" value="{{ next }}">
+    <button type="submit">Log in</button>
+  </form>
+  <p>New here? <a href="{% url 'signup' %}">Create an account</a>.</p>
+{% endblock %}
+```
+
+```jinja title="templates/accounts/signup.html"
+{% extends "base.html" %}
+
+{% block title %}Sign up | Book Club{% endblock %}
+
+{% block content %}
+  <h1>Create an account</h1>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Sign up</button>
+  </form>
+  <p>Already a member? <a href="{% url 'login' %}">Log in</a>.</p>
+{% endblock %}
+```
+
+Since Django 5, logging out requires a **POST** request, so the nav uses a small form. Replace `base.html`:
+
+```jinja title="templates/base.html"
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Book Club{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/site.css' %}">
+</head>
+<body>
+  <header>
+    <a class="brand" href="{% url 'books:home' %}">Book Club</a>
+    <nav>
+      <a href="{% url 'books:book_list' %}">Books</a>
+      {% if user.is_authenticated %}
+        <a href="{% url 'books:book_create' %}">Add a book</a>
+        <span>Hi, {{ user.username }}</span>
+        <form method="post" action="{% url 'logout' %}" class="inline">
+          {% csrf_token %}
+          <button type="submit">Log out</button>
+        </form>
+      {% else %}
+        <a href="{% url 'login' %}">Log in</a>
+        <a href="{% url 'signup' %}">Sign up</a>
+      {% endif %}
+    </nav>
+  </header>
+
+  <main>
+    {% if messages %}
+      <ul class="messages">
+        {% for message in messages %}
+          <li class="{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>Built with Django</footer>
+</body>
+</html>
+```
+
+The `user` variable is available in every template because of the `auth` context processor you enabled in settings.
+
+## Protecting views
+
+`@login_required` sends anonymous visitors to the login page, remembering where they were headed (`?next=/books/new/`).
+
+```python title="books/views.py"
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db.models import Avg, Count, Q
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
+
+from .forms import BookForm, ReviewForm
+from .models import Book, Review
+
+SORT_OPTIONS = {
+    "title": "title",
+    "newest": "-published_year",
+    "oldest": "published_year",
+    "longest": "-pages",
+}
+
+
+def home(request):
+    return render(request, "books/home.html", {"message": "Welcome to Book Club"})
+
+
+def book_list(request):
+    query = request.GET.get("q", "").strip()
+    sort = request.GET.get("sort", "title")
+
+    books = (
+        Book.objects.select_related("author")
+        .prefetch_related("genres")
+        .annotate(average_rating=Avg("reviews__rating"), review_count=Count("reviews"))
+    )
+    if query:
+        books = books.filter(Q(title__icontains=query) | Q(author__name__icontains=query))
+    books = books.order_by(SORT_OPTIONS.get(sort, "title"))
+
+    context = {"books": books, "query": query, "sort": sort}
+    return render(request, "books/book_list.html", context)
+
+
+def book_detail(request, book_id):
+    book = get_object_or_404(
+        Book.objects.select_related("author").prefetch_related("genres", "reviews__user"),
+        pk=book_id,
+    )
+    context = {"book": book, "average_rating": book.reviews.aggregate(avg=Avg("rating"))["avg"]}
+    return render(request, "books/book_detail.html", context)
+
+
+@login_required
+def book_create(request):
+    if request.method == "POST":
+        form = BookForm(request.POST)
+        if form.is_valid():
+            book = form.save()
+            messages.success(request, f"Added {book.title}.")
+            return redirect("books:book_detail", book_id=book.pk)
+    else:
+        form = BookForm()
+    return render(request, "books/book_form.html", {"form": form, "heading": "Add a book"})
+
+
+@login_required
+def book_update(request, book_id):
+    book = get_object_or_404(Book, pk=book_id)
+    if request.method == "POST":
+        form = BookForm(request.POST, instance=book)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Updated {book.title}.")
+            return redirect("books:book_detail", book_id=book.pk)
+    else:
+        form = BookForm(instance=book)
+    return render(request, "books/book_form.html", {"form": form, "heading": f"Edit {book.title}"})
+
+
+@login_required
+@require_POST
+def book_delete(request, book_id):
+    book = get_object_or_404(Book, pk=book_id)
+    book.delete()
+    messages.success(request, f"Deleted {book.title}.")
+    return redirect("books:book_list")
+
+
+@login_required
+def review_create(request, book_id):
+    book = get_object_or_404(Book, pk=book_id)
+    existing = Review.objects.filter(book=book, user=request.user).first()   # one review per user
+
+    if request.method == "POST":
+        form = ReviewForm(request.POST, instance=existing)
+        if form.is_valid():
+            review = form.save(commit=False)       # build the object but do not save yet
+            review.book = book                     # fill in what the user must not control
+            review.user = request.user
+            review.save()
+            messages.success(request, "Thanks for your review.")
+            return redirect("books:book_detail", book_id=book.pk)
+    else:
+        form = ReviewForm(instance=existing)
+    return render(request, "books/review_form.html", {"form": form, "book": book})
+```
+
+Two important details in `review_create`:
+
+- `form.save(commit=False)` returns the unsaved object so you can set `book` and `user` from the URL and the session. The user never chooses those fields, which means nobody can post a review as someone else.
+- The form class excludes them, as shown next.
+
+```python title="books/forms.py"
+from datetime import date
+
+from django import forms
+from django.core.exceptions import ValidationError
+
+from .models import Book, Review
+
+
+class BookForm(forms.ModelForm):
+    class Meta:
+        model = Book
+        fields = ["title", "author", "genres", "published_year", "pages", "summary"]
+        widgets = {
+            "summary": forms.Textarea(attrs={"rows": 4}),
+            "genres": forms.CheckboxSelectMultiple,
+        }
+        help_texts = {"pages": "Total printed pages."}
+
+    def clean_title(self):
+        title = self.cleaned_data["title"].strip()
+        if title.isdigit():
+            raise ValidationError("A title cannot be only numbers.")
+        return title
+
+    def clean_published_year(self):
+        year = self.cleaned_data["published_year"]
+        if not 1000 <= year <= date.today().year:
+            raise ValidationError(f"Enter a year between 1000 and {date.today().year}.")
+        return year
+
+    def clean(self):
+        cleaned = super().clean()
+        title, author = cleaned.get("title"), cleaned.get("author")
+        if title and author:
+            duplicates = Book.objects.filter(title__iexact=title, author=author)
+            if self.instance.pk:
+                duplicates = duplicates.exclude(pk=self.instance.pk)
+            if duplicates.exists():
+                raise ValidationError("That author already has a book with this title.")
+        return cleaned
+
+
+class ReviewForm(forms.ModelForm):
+    class Meta:
+        model = Review
+        fields = ["rating", "text"]            # book and user are set in the view
+        widgets = {"text": forms.Textarea(attrs={"rows": 4})}
+```
+
+```jinja title="books/templates/books/review_form.html"
+{% extends "base.html" %}
+
+{% block title %}Review {{ book.title }} | Book Club{% endblock %}
+
+{% block content %}
+  <h1>Review {{ book.title }}</h1>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Save review</button>
+    <a href="{% url 'books:book_detail' book.id %}">Cancel</a>
+  </form>
+{% endblock %}
+```
+
+```python title="books/urls.py"
+from django.urls import path
+
+from . import views
+
+app_name = "books"
+
+urlpatterns = [
+    path("", views.home, name="home"),
+    path("books/", views.book_list, name="book_list"),
+    path("books/new/", views.book_create, name="book_create"),
+    path("books/<int:book_id>/", views.book_detail, name="book_detail"),
+    path("books/<int:book_id>/edit/", views.book_update, name="book_update"),
+    path("books/<int:book_id>/delete/", views.book_delete, name="book_delete"),
+    path("books/<int:book_id>/review/", views.review_create, name="review_create"),
+]
+```
+
+Finally, give the detail page a review link for members:
+
+```jinja title="books/templates/books/book_detail.html"
+{% extends "base.html" %}
+
+{% block title %}{{ book.title }} | Book Club{% endblock %}
+
+{% block content %}
+  <h1>{{ book.title }}</h1>
+  <p>
+    by {{ book.author.name }}, {{ book.published_year }} &middot; {{ book.pages }} pages
+  </p>
+  <p>
+    {% for genre in book.genres.all %}<span class="tag">{{ genre.name }}</span>{% endfor %}
+  </p>
+  {% if book.summary %}<p>{{ book.summary }}</p>{% endif %}
+
+  {% if user.is_authenticated %}
+    <p>
+      <a href="{% url 'books:book_update' book.id %}">Edit</a>
+      <form method="post" action="{% url 'books:book_delete' book.id %}" class="inline"
+            onsubmit="return confirm('Delete this book?')">
+        {% csrf_token %}
+        <button type="submit">Delete</button>
+      </form>
+    </p>
+  {% endif %}
+
+  <h2>Reviews{% if average_rating %} ({{ average_rating|floatformat:1 }} / 5){% endif %}</h2>
+  {% for review in book.reviews.all %}
+    <article>
+      <strong>{{ review.user.username }}</strong> gave it {{ review.rating }} / 5
+      <p>{{ review.text }}</p>
+    </article>
+  {% empty %}
+    <p>No reviews yet.</p>
+  {% endfor %}
+
+  {% if user.is_authenticated %}
+    <p><a href="{% url 'books:review_create' book.id %}">Write or update your review</a></p>
+  {% else %}
+    <p><a href="{% url 'login' %}?next={{ request.path }}">Log in</a> to write a review.</p>
+  {% endif %}
+
+  <p><a href="{% url 'books:book_list' %}">&larr; All books</a></p>
+{% endblock %}
+```
+
+## Passwords
+
+- Django stores a salted hash (PBKDF2 by default). You can never recover a password, only reset it.
+- `AUTH_PASSWORD_VALIDATORS` in settings enforce length and common-password rules.
+- To create users in code use `User.objects.create_user("mia", password="...")`, which hashes the password. `User.objects.create(password="...")` would store it in plain text, so never do that.
+- Use `user.check_password("...")` to verify and `user.set_password("...")` to change.
+
+<Aside type="caution" title="Do not roll your own">
+Authentication is easy to get subtly wrong. Use Django's views, forms and hashers, keep `DEBUG = False` in production,
+and serve the site over HTTPS so cookies and passwords are encrypted in transit.
+</Aside>
+
+## Check yourself
+
+1. Why does the logout button use a form with a POST instead of a link?
+2. What does `?next=/books/new/` in the login URL do?
+3. What is wrong with `User.objects.create(username="sam", password="hunter2")`?
+
+<details>
+<summary>Answers</summary>
+
+1. Logging out changes server state, so it should not be triggered by a `GET`. A link could be followed by a prefetcher or an attacker's image tag. A POST with a CSRF token is deliberate.
+2. After a successful login, Django sends the user back to that page instead of `LOGIN_REDIRECT_URL`.
+3. `create()` stores the password text as it is, unhashed, and the user cannot log in. Use `create_user()`, which calls `set_password()`.
+
+</details>

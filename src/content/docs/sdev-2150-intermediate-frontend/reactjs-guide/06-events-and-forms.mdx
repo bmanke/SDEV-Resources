@@ -1,0 +1,324 @@
+---
+title: "6. Events and Forms"
+description: "Handle clicks, typing and form submission, and build controlled inputs that keep state and the screen in sync."
+difficulty: beginner
+readingTime: 18
+tags: [react, events, forms, controlled-inputs]
+sidebar:
+  order: 6
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+An **event** is something that happens: a click, a key press, a form submission. Handling events in React is close to handling them on plain DOM elements, with two syntax differences:
+
+- React event names use **camelCase** (`onClick`, not `onclick`).
+- You pass a **function** as the handler, not a string of code.
+
+## Adding an event handler
+
+```jsx
+function ExploreButton() {
+  function handleClick() {
+    console.log('Explore clicked');
+  }
+
+  return (
+    <button type="button" onClick={handleClick}>
+      Explore more
+    </button>
+  );
+}
+```
+
+You can also write the function inline, which is common for short handlers:
+
+```jsx
+<button type="button" onClick={() => console.log('Explore clicked')}>
+  Explore more
+</button>
+```
+
+<Aside type="caution" title="Pass the function, do not call it">
+`onClick={handleClick()}` calls `handleClick` while React is rendering and passes its result (usually `undefined`) as the handler. Write `onClick={handleClick}` or wrap the call: `onClick={() => handleClick(id)}`. Use the wrapper whenever you need to pass an argument, such as the id of the item.
+</Aside>
+
+## The event object
+
+React calls your handler with an **event object** that describes what happened.
+
+```jsx
+function Demo() {
+  function handleChange(event) {
+    console.log(event.target.value);   // the text currently in the input
+  }
+
+  function handleKeyDown(event) {
+    if (event.key === 'Enter') console.log('Enter pressed');
+  }
+
+  return <input onChange={handleChange} onKeyDown={handleKeyDown} />;
+}
+```
+
+Useful members:
+
+| Member | Use |
+| ------ | --- |
+| `event.target` | The element that triggered the event (`event.target.value` is an input's text) |
+| `event.currentTarget` | The element the handler is attached to |
+| `event.key` | Which key was pressed in `onKeyDown` |
+| `event.preventDefault()` | Stop the browser's default action, such as a form reloading the page |
+| `event.stopPropagation()` | Stop the event bubbling up to parent handlers |
+
+### Common events
+
+| Event | Fires when |
+| ----- | ---------- |
+| `onClick` | An element is clicked or activated with the keyboard |
+| `onChange` | The value of an input, textarea or select changes (on every keystroke for text) |
+| `onSubmit` | A form is submitted (button click or Enter) |
+| `onKeyDown`, `onKeyUp` | A key is pressed or released |
+| `onFocus`, `onBlur` | A field gains or loses focus |
+| `onMouseEnter`, `onMouseLeave` | The pointer enters or leaves an element |
+
+Unlike plain HTML, React's `onChange` fires on every keystroke, not when the field loses focus.
+
+## Controlled inputs
+
+A form field in React is normally **controlled**: React state is the single source of truth for what the field shows. You give the input a `value` from state and an `onChange` that updates that state.
+
+```jsx
+function Greeting() {
+  const [name, setName] = useState('');
+
+  return (
+    <>
+      <label htmlFor="name">Your name</label>
+      <input id="name" value={name} onChange={(event) => setName(event.target.value)} />
+      <p>Hello, {name || 'stranger'}</p>
+    </>
+  );
+}
+```
+
+Every keystroke runs `onChange`, which updates state, which re-renders the input with the new value. Because the state is always up to date, you can show it elsewhere, validate it, or clear it with `setName('')`.
+
+<Aside type="note">
+An input with `value` but no `onChange` is read-only, and React warns about it. If you want an uncontrolled field that the browser manages, use `defaultValue` instead.
+</Aside>
+
+## A live search box
+
+The search text must be shared between the search box and the list, so it lives in `App`, their parent. The search box gets the current text and a way to change it.
+
+```jsx title="src/components/SearchBar.jsx"
+export default function SearchBar({ value, onChange }) {
+  return (
+    <div className="search-bar">
+      <label htmlFor="search">Search movies</label>
+      <input
+        id="search"
+        type="search"
+        placeholder="Type a title"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') onChange('');
+        }}
+      />
+    </div>
+  );
+}
+```
+
+`SearchBar` has no state of its own. Pressing Escape clears the field by calling the parent's function with an empty string.
+
+In `App`, the filtered list is **calculated** from the full list and the query on every render. It is not stored in a second state variable.
+
+```jsx title="src/App.jsx (excerpt)"
+const [query, setQuery] = useState('');
+
+const visibleMovies = movies.filter((movie) =>
+  movie.title.toLowerCase().includes(query.trim().toLowerCase()),
+);
+
+// ...
+<SearchBar value={query} onChange={setQuery} />
+<MovieList movies={visibleMovies} /* other props */ />
+```
+
+## Forms and `onSubmit`
+
+A form has a lot of fields, and giving each its own `useState` gets long. A common pattern is **one state object** and a single `handleChange` that uses each input's `name` attribute to decide which property to update.
+
+```jsx title="src/components/AddMovieForm.jsx"
+import { useState } from 'react';
+import { genres } from '../data/movies.js';
+
+const emptyForm = { title: '', year: '2024', genre: 'Drama', rating: '7' };
+
+export default function AddMovieForm({ onAdd }) {
+  const [form, setForm] = useState(emptyForm);
+
+  function handleChange(event) {
+    const { name, value } = event.target;
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    const title = form.title.trim();
+    if (!title) return;
+
+    onAdd({
+      title,
+      year: Number(form.year),
+      genre: form.genre,
+      rating: Number(form.rating),
+    });
+    setForm(emptyForm);
+  }
+
+  return (
+    <form className="add-movie" onSubmit={handleSubmit}>
+      <h2>Add a movie</h2>
+
+      <label htmlFor="title">Title</label>
+      <input id="title" name="title" value={form.title} onChange={handleChange} />
+
+      <label htmlFor="year">Year</label>
+      <input id="year" name="year" type="number" value={form.year} onChange={handleChange} />
+
+      <label htmlFor="genre">Genre</label>
+      <select id="genre" name="genre" value={form.genre} onChange={handleChange}>
+        {genres.map((genre) => (
+          <option key={genre}>{genre}</option>
+        ))}
+      </select>
+
+      <label htmlFor="rating">Rating (0 to 10)</label>
+      <input
+        id="rating"
+        name="rating"
+        type="number"
+        min="0"
+        max="10"
+        step="0.1"
+        value={form.rating}
+        onChange={handleChange}
+      />
+
+      <button type="submit">Add movie</button>
+    </form>
+  );
+}
+```
+
+Add the genre list to the data file so the select and, later, the sidebar can share it:
+
+```js title="src/data/movies.js (add at the bottom)"
+export const genres = ['Animation', 'Comedy', 'Drama', 'Sci-Fi', 'Thriller'];
+```
+
+Points worth remembering:
+
+- **`[name]: value`** is a computed property name. When `name` is `'title'`, it updates `form.title`.
+- **`event.preventDefault()`** stops the browser from submitting the form and reloading the page.
+- **Inputs return strings**, even `type="number"`. Convert with `Number(...)` before storing numbers.
+- **Select and textarea** also use `value` and `onChange` in React. For a checkbox, use `checked={...}` and read `event.target.checked`.
+- **Labels** connect to inputs with `htmlFor` and `id`, which keeps the form usable with screen readers and makes clicking a label focus its field.
+- **Resetting** is just setting state back to the empty form.
+
+Finally, `App` owns the list of movies and adds the new one. The id is calculated inside the updater, so it is based on the latest list.
+
+```jsx title="src/App.jsx"
+import { useState } from 'react';
+import Header from './components/Header.jsx';
+import Sidebar from './components/Sidebar.jsx';
+import SearchBar from './components/SearchBar.jsx';
+import Panel from './components/Panel.jsx';
+import MovieList from './components/MovieList.jsx';
+import AddMovieForm from './components/AddMovieForm.jsx';
+import { movies as initialMovies } from './data/movies.js';
+
+export default function App() {
+  const [movies, setMovies] = useState(initialMovies);
+  const [favoriteIds, setFavoriteIds] = useState([]);
+  const [query, setQuery] = useState('');
+
+  const visibleMovies = movies.filter((movie) =>
+    movie.title.toLowerCase().includes(query.trim().toLowerCase()),
+  );
+
+  function toggleFavorite(id) {
+    setFavoriteIds((ids) =>
+      ids.includes(id) ? ids.filter((existing) => existing !== id) : [...ids, id],
+    );
+  }
+
+  function addMovie(movie) {
+    setMovies((current) => {
+      const nextId = Math.max(0, ...current.map((m) => m.id)) + 1;
+      return [...current, { ...movie, id: nextId }];
+    });
+  }
+
+  return (
+    <>
+      <Header />
+      <div className="layout">
+        <Sidebar />
+        <main>
+          <SearchBar value={query} onChange={setQuery} />
+          <Panel title="All movies">
+            <p>Favorites: {favoriteIds.length}</p>
+            <MovieList
+              movies={visibleMovies}
+              favoriteIds={favoriteIds}
+              onToggleFavorite={toggleFavorite}
+            />
+          </Panel>
+          <AddMovieForm onAdd={addMovie} />
+        </main>
+      </div>
+    </>
+  );
+}
+```
+
+Type a title, pick a genre and submit. The new card appears, and the form clears. Lesson 14 replaces the hand-written form state with React Hook Form and adds validation.
+
+## Check yourself
+
+1. Build a `CharacterCounter`: a textarea with a limit of 100 characters that shows "N characters left".
+2. A button `<button onClick={deleteMovie(5)}>Delete</button>` deletes the movie as soon as the page loads. Why, and how do you fix it?
+3. Why does `AddMovieForm` call `event.preventDefault()`?
+4. What would happen if you removed `onChange` from a controlled `<input value={query} />`?
+
+<details>
+<summary>Answers</summary>
+
+```jsx
+// 1
+import { useState } from 'react';
+
+export default function CharacterCounter() {
+  const [text, setText] = useState('');
+  const remaining = 100 - text.length;
+
+  return (
+    <>
+      <label htmlFor="note">Note</label>
+      <textarea id="note" maxLength={100} value={text} onChange={(e) => setText(e.target.value)} />
+      <p>{remaining} characters left</p>
+    </>
+  );
+}
+```
+
+2. `deleteMovie(5)` is called during rendering, and its return value becomes the handler. Pass a function instead: `onClick={() => deleteMovie(5)}`.
+3. A form submission reloads the page by default, which would wipe out React's state. `preventDefault` cancels that so the handler can update state instead.
+4. The field would be stuck: the user could not type, because React keeps resetting the value to the state, and React logs a warning that the field is read-only.
+
+</details>

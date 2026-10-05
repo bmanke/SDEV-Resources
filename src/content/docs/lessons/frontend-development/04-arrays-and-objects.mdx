@@ -1,0 +1,232 @@
+---
+title: "4. Arrays and Objects"
+description: "Store collections and records, then transform data with map, filter, find and reduce."
+difficulty: intermediate
+readingTime: 15
+tags: [javascript, arrays, objects]
+sidebar:
+  order: 4
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Real applications work with collections of data: a list of tasks, a set of products, a table of users. JavaScript has
+two main structures for this: **arrays** for ordered lists and **objects** for named properties.
+
+## Arrays
+
+```js
+const scores = [88, 92, 79];
+
+console.log(scores[0]);            // 88: positions start at 0
+console.log(scores.length);        // 3
+console.log(scores.at(-1));        // 79: negative positions count from the end
+
+scores.push(95);                   // add to the end
+scores.unshift(100);               // add to the start
+const last = scores.pop();         // remove and return the last item
+const first = scores.shift();      // remove and return the first item
+console.log(scores);               // [88, 92, 79]
+```
+
+Other helpers:
+
+```js
+const letters = ['b', 'c', 'a'];
+
+console.log(letters.includes('c'));        // true
+console.log(letters.indexOf('a'));         // 2 (-1 if missing)
+console.log([...letters].sort());          // ['a', 'b', 'c']
+console.log(letters.slice(0, 2));          // ['b', 'c'] (a copy, end excluded)
+console.log(letters.join(' - '));          // 'b - c - a'
+```
+
+`sort()` **changes the original array**. Copy first with `[...letters]` if you want to keep the order.
+
+### const does not freeze the contents
+
+`const` stops you from reassigning the variable, but you can still change what is inside:
+
+```js
+const list = [];
+list.push('ok');       // fine
+// list = [];          // TypeError
+```
+
+## Objects
+
+An object groups related values under names (properties).
+
+```js
+const book = {
+  title: 'The Legend of Hyrule',
+  author: 'Zelda',
+  year: 2020,
+  tags: ['fantasy', 'adventure'],
+  isAvailable: true,
+  describe() {                       // a method: a function stored on the object
+    return `${this.title} by ${this.author}`;
+  },
+};
+
+console.log(book.title);             // dot notation
+console.log(book['author']);         // bracket notation (useful with variables)
+book.year = 2021;                    // change
+book.pages = 320;                    // add
+delete book.isAvailable;             // remove
+console.log(book.describe());
+console.log('year' in book);         // true
+```
+
+Looking at the keys and values:
+
+```js
+console.log(Object.keys(book));
+console.log(Object.entries({ a: 1, b: 2 }));    // [['a', 1], ['b', 2]]
+
+for (const [key, value] of Object.entries({ a: 1, b: 2 })) {
+  console.log(key, value);
+}
+```
+
+### Destructuring and spread
+
+```js
+const { title, author } = book;               // pull properties into variables
+const [firstTag, secondTag] = book.tags;      // pull items out of an array
+
+const updated = { ...book, year: 2025 };      // copy an object and change one property
+const more = [...book.tags, 'epic'];          // copy an array and add an item
+```
+
+Spread makes **shallow copies**. Objects nested inside are still shared.
+
+## Arrays of objects
+
+This is the shape of nearly all API data: a list of records.
+
+```js
+const books = [
+  { id: 1, title: 'Hyrule Tales', year: 2020, price: 12.5 },
+  { id: 2, title: 'The Hero Journey', year: 2022, price: 18 },
+  { id: 3, title: 'Ganon Chronicles', year: 2021, price: 9.75 },
+];
+```
+
+## Array methods that replace loops
+
+Each of these takes a callback and returns a result without needing a manual loop.
+
+### forEach: do something for each item
+
+```js
+books.forEach((book) => console.log(book.title));
+```
+
+### map: transform every item into a new array
+
+```js
+const titles = books.map((book) => book.title);
+console.log(titles);   // ['Hyrule Tales', 'The Hero Journey', 'Ganon Chronicles']
+
+const withTax = books.map((book) => ({ ...book, price: +(book.price * 1.05).toFixed(2) }));
+```
+
+### filter: keep only matching items
+
+```js
+const recent = books.filter((book) => book.year >= 2021);
+console.log(recent.length);   // 2
+```
+
+### find: the first match (or undefined)
+
+```js
+const hero = books.find((book) => book.title.includes('Hero'));
+console.log(hero.id);   // 2
+```
+
+### some and every: yes/no questions
+
+```js
+console.log(books.some((book) => book.price > 15));    // true
+console.log(books.every((book) => book.price > 15));   // false
+```
+
+### reduce: combine everything into one value
+
+```js
+const totalPrice = books.reduce((sum, book) => sum + book.price, 0);
+console.log(totalPrice);   // 40.25
+```
+
+### sort: with a comparison function
+
+```js
+const byPrice = [...books].sort((a, b) => a.price - b.price);   // cheapest first
+const byTitle = [...books].sort((a, b) => a.title.localeCompare(b.title));
+```
+
+### Chaining
+
+```js
+const summary = books
+  .filter((book) => book.year >= 2021)
+  .map((book) => book.title.toUpperCase())
+  .join(', ');
+
+console.log(summary);   // THE HERO JOURNEY, GANON CHRONICLES
+```
+
+<Aside type="tip" title="Which method?">
+Same number of items, but changed: `map`. Fewer items: `filter`. One item: `find`. A single total: `reduce`. Just a side effect (like logging): `forEach`.
+</Aside>
+
+## JSON
+
+JSON is a text format for data that looks like JavaScript objects but with stricter rules (double quotes everywhere, no functions). It is how the browser and servers exchange data.
+
+```js
+const text = JSON.stringify({ id: 1, title: 'Hyrule Tales' });
+console.log(text);                    // '{"id":1,"title":"Hyrule Tales"}'
+
+const parsed = JSON.parse(text);
+console.log(parsed.title);            // 'Hyrule Tales'
+```
+
+## Check yourself
+
+1. From `books`, get an array of titles for books under $15, sorted alphabetically.
+2. Compute the average price.
+3. Write `groupByYear(books)` that returns an object like `{ 2020: ['Hyrule Tales'], 2021: [...] }`.
+
+<details>
+<summary>Answers</summary>
+
+```js
+// 1
+const cheap = books
+  .filter((book) => book.price < 15)
+  .map((book) => book.title)
+  .sort();
+console.log(cheap);   // ['Ganon Chronicles', 'Hyrule Tales']
+
+// 2
+const average = books.reduce((sum, book) => sum + book.price, 0) / books.length;
+console.log(average.toFixed(2));   // 13.42
+
+// 3
+function groupByYear(list) {
+  const groups = {};
+  for (const book of list) {
+    if (!groups[book.year]) {
+      groups[book.year] = [];
+    }
+    groups[book.year].push(book.title);
+  }
+  return groups;
+}
+console.log(groupByYear(books));
+```
+
+</details>

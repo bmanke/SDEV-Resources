@@ -1,0 +1,255 @@
+---
+title: "3. Control Flow and Functions"
+description: "Make decisions, repeat work and package behaviour into functions with if, loops and arrow functions."
+difficulty: beginner
+readingTime: 15
+tags: [javascript, conditionals, loops, functions]
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Programs run top to bottom unless you redirect them. **Conditionals** choose a path, **loops** repeat steps, and **functions** give a block of code a name so you can reuse it.
+
+## Conditionals
+
+```js
+const hour = 14;
+
+if (hour < 12) {
+  console.log('Good morning');
+} else if (hour < 18) {
+  console.log('Good afternoon');
+} else {
+  console.log('Good evening');
+}
+```
+
+- The condition goes in parentheses and the block in curly braces.
+- Conditions are checked top to bottom, and only the first match runs.
+- Combine conditions with `&&`, `||` and `!`.
+
+```js
+const age = 20;
+const hasId = true;
+if (age >= 18 && hasId) {
+  console.log('Entry allowed');
+}
+```
+
+### The ternary operator
+
+A compact if/else that produces a value:
+
+```js
+const label = age >= 18 ? 'adult' : 'minor';
+```
+
+Use it for short choices only. Use a normal `if` once it gets complicated.
+
+### switch
+
+Good for comparing one value against many fixed options. Each case needs `break`, or execution falls through to the next case.
+
+```js
+const day = 'sat';
+
+switch (day) {
+  case 'sat':
+  case 'sun':
+    console.log('Weekend');
+    break;
+  case 'mon':
+    console.log('Back to work');
+    break;
+  default:
+    console.log('Midweek');
+}
+```
+
+## Loops
+
+### for
+
+Three parts: start, condition, step.
+
+```js
+for (let i = 1; i <= 5; i++) {
+  console.log(`Row ${i}`);
+}
+```
+
+### while and do...while
+
+```js
+let balance = 100;
+while (balance > 0) {
+  balance -= 30;
+  console.log('Balance:', balance);
+}
+```
+
+`break` leaves a loop; `continue` skips to the next round.
+
+### for...of
+
+Prefer this to walk through the items of an array or characters of a string.
+
+```js
+const fruits = ['apple', 'pear', 'plum'];
+
+for (const fruit of fruits) {
+  console.log(fruit);
+}
+```
+
+<Aside type="caution" title="Infinite loops freeze the tab">
+If the condition never becomes false, the browser tab hangs. Always make sure something inside the loop moves it toward finishing.
+</Aside>
+
+## Functions
+
+### Declarations
+
+```js
+function greet(name) {
+  return `Hello, ${name}!`;
+}
+
+console.log(greet('Zelda'));   // Hello, Zelda!
+```
+
+- Parameters are the names in the definition. **Arguments** are the values you pass in.
+- `return` sends a value back and ends the function. Without it, you get `undefined`.
+- Declarations are **hoisted**, so you can call them above where they are written.
+
+### Default parameters
+
+```js
+function priceWithTax(price, rate = 0.05) {
+  return Math.round(price * (1 + rate) * 100) / 100;   // round to cents
+}
+
+console.log(priceWithTax(100));        // 105
+console.log(priceWithTax(100, 0.12));  // 112
+```
+
+### Function expressions and arrow functions
+
+Functions are values. You can store them in variables and pass them to other functions.
+
+```js
+const double = function (n) {
+  return n * 2;
+};
+
+const triple = (n) => n * 3;               // arrow function: implicit return
+const area = (w, h) => {                   // braces need an explicit return
+  const result = w * h;
+  return result;
+};
+
+console.log(double(4), triple(4), area(2, 3));  // 8 12 6
+```
+
+### Scope
+
+`let` and `const` are **block scoped**: they only exist inside the nearest pair of braces.
+
+```js
+const total = 10;          // visible everywhere below
+
+function demo() {
+  const inner = 5;         // only visible inside demo
+  if (true) {
+    const deeper = 1;      // only visible inside this if block
+  }
+  return total + inner;    // inner functions can read outer variables
+}
+
+console.log(demo());       // 15
+// console.log(inner);     // ReferenceError
+```
+
+### Callbacks
+
+A **callback** is a function you hand to another function to be called later. You will see this constantly with events and timers.
+
+```js
+function repeat(times, action) {
+  for (let i = 1; i <= times; i++) {
+    action(i);
+  }
+}
+
+repeat(3, (n) => console.log(`Run number ${n}`));
+```
+
+## Pure functions: easier to trust
+
+A function that depends only on its parameters and returns a result (no hidden changes elsewhere) is predictable and easy to test.
+
+```js
+// Hard to test: depends on and changes outside state
+let score = 0;
+function addPoint() {
+  score++;
+}
+
+// Easy to test: same input always gives the same output
+const withPoint = (currentScore) => currentScore + 1;
+```
+
+## Example: FizzBuzz as a function
+
+```js title="fizzbuzz.js"
+function fizzBuzz(n) {
+  if (n % 15 === 0) return 'FizzBuzz';
+  if (n % 3 === 0) return 'Fizz';
+  if (n % 5 === 0) return 'Buzz';
+  return String(n);
+}
+
+for (let i = 1; i <= 15; i++) {
+  console.log(fizzBuzz(i));
+}
+```
+
+## Check yourself
+
+1. Write `isAdult(age)` that returns `true` or `false`, using no `if` statement.
+2. Write `sumTo(n)` that returns `1 + 2 + ... + n` using a loop.
+3. Write `countVowels(text)` using a `for...of` loop.
+
+<details>
+<summary>Answers</summary>
+
+```js
+// 1
+const isAdult = (age) => age >= 18;
+
+// 2
+function sumTo(n) {
+  let total = 0;
+  for (let i = 1; i <= n; i++) {
+    total += i;
+  }
+  return total;
+}
+console.log(sumTo(4));  // 10
+
+// 3
+function countVowels(text) {
+  let count = 0;
+  for (const char of text.toLowerCase()) {
+    if ('aeiou'.includes(char)) {
+      count++;
+    }
+  }
+  return count;
+}
+console.log(countVowels('Hyrule Castle'));  // 4
+```
+
+</details>

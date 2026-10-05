@@ -1,0 +1,256 @@
+---
+title: "18. What to Learn Next and Project Ideas"
+description: "Review what Filmshelf covers, meet the tools the roadmap leaves for later, and pick projects that turn the guide into portfolio pieces."
+difficulty: intermediate
+readingTime: 16
+tags: [react, roadmap, typescript, nextjs, react-native, portfolio, projects]
+sidebar:
+  order: 18
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+You started with a blank folder and ended with a tested, deployed, multi-page app. This last lesson looks back at what you built, introduces the tools the roadmap lists for later, and gives you a list of projects to practise on.
+
+The topics and the order of this guide follow the free ReactJS Guide from [JSMastery](https://jsmastery.com/). You can read the original on the [ReactJS Guide resource page](/resources/reactjs-guide/).
+
+## What you built
+
+Filmshelf grew one lesson at a time. Here is where each feature came from:
+
+| Feature in Filmshelf | Concept | Lesson |
+| -------------------- | ------- | ------ |
+| Cards built from a data array | Components, JSX, props, lists and keys | 3, 4 |
+| Favorite toggle, search box | State and events | 5, 6 |
+| Add-movie form | Controlled inputs, then React Hook Form | 6, 14 |
+| Card, layout and dark-theme styling | CSS variables, CSS Modules | 7 |
+| Genre filter, empty and loading states | Conditional rendering | 8 |
+| Loading `movies.json` | `useEffect`, then Axios and TanStack Query | 9, 14 |
+| Search shortcut, theme switch | `useRef`, `useContext` | 10 |
+| Remembered favorites, debounced search | Custom hooks | 11 |
+| Cards that skip pointless renders | `memo`, `useCallback`, `useMemo` | 12 |
+| Home, detail and not-found pages | React Router | 13 |
+| Favorites in the header | Redux Toolkit | 15 |
+| 29 automated tests | Vitest and Testing Library | 16 |
+| A public URL | Vite build, GitHub Pages and Actions | 17 |
+
+The finished project looks like this:
+
+```text
+filmshelf/
+├── public/
+│   ├── favicon.svg
+│   └── movies.json
+├── scripts/
+│   └── copy-404.mjs
+├── src/
+│   ├── api/            movies.js (Axios), movies.test.js
+│   ├── components/     AddMovieForm, Header, Layout, MovieCard (+ module + test),
+│   │                   MovieList, Panel, SearchBar, Sidebar
+│   ├── context/        ThemeContext.js, ThemeProvider.jsx
+│   ├── data/           movies.js (the genre list)
+│   ├── hooks/          useDebounce, useLocalStorage, useMovies (+ tests)
+│   ├── pages/          HomePage, MovieDetailPage, NotFoundPage
+│   ├── store/          favoritesSlice.js, index.js (+ test)
+│   ├── test/           renderApp.jsx, setup.js
+│   ├── App.jsx
+│   ├── App.test.jsx
+│   ├── index.css
+│   ├── main.jsx
+│   └── routing.test.jsx
+├── index.html
+├── package.json
+└── vite.config.js
+```
+
+It is a small app, but it contains the same pieces as large ones: a router, server-state caching, shared client state, forms with validation, tests and a deployment pipeline. Larger projects mostly have more of each.
+
+## Packages the roadmap lists that were not covered
+
+The popular-packages list in the roadmap mentions three more tools. They are worth knowing, but you can learn them when a project calls for them.
+
+| Package | What it does | Notes |
+| ------- | ------------ | ----- |
+| **Styled Components** | Write CSS inside JavaScript, scoped to a component | The maintainers [announced maintenance mode in March 2025](https://www.sanity.io/engineering/cut-styled-components-into-pieces-this-is-our-last-resort). It is common in older codebases, but CSS Modules and Tailwind are the usual choice for new work |
+| **Storybook** | Build and document components in isolation, outside your app | Useful for design systems and shared component libraries. The current release is version 10.6 |
+| **Motion** (formerly Framer Motion) | Declarative animations | [Framer Motion became the independent Motion library](https://motion.dev/magazine/framer-motion-is-now-independent-introducing-motion). Install `motion` and import from `motion/react` |
+
+A taste of Motion: fade each card in as it appears.
+
+```sh
+npm install motion
+```
+
+```jsx
+import { motion } from 'motion/react';
+
+<motion.li
+  initial={{ opacity: 0, y: 12 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.3 }}
+>
+  <MovieCard {...movie} />
+</motion.li>
+```
+
+`motion.li` is a normal `li` that understands `initial`, `animate` and `transition`. Respect users who ask for less movement: check `prefers-reduced-motion` and skip decorative animation for them.
+
+## What to learn after React
+
+The last roadmap page lists five directions. You do not need all of them, so pick based on the work you want to do.
+
+| Technology | What it is | Choose it when |
+| ---------- | ---------- | -------------- |
+| **TypeScript** | JavaScript with types that catch mistakes before you run the code | Almost always. It is the most valuable next step, and most employers expect it |
+| **Next.js** | A React framework with file-based routing, server rendering and API routes | You need SEO, fast first loads or a full-stack app in one project |
+| **React Native** | Build iPhone and Android apps with React concepts | You want mobile apps. Expo is the usual way to start |
+| **Electron** | Build desktop apps with web technology | You want a Windows, macOS or Linux app from a web codebase |
+| **Gatsby** | A static site generator built on React | Mostly for maintaining existing sites. Netlify acquired it in 2023, and it is [in maintenance mode](https://www.sanity.io/glossary/gatsby) |
+
+Version snapshot, checked on npm in October 2026: Next.js 16.3, React Native 0.87, Electron 44.5 and TypeScript 7.0.
+
+### TypeScript first
+
+[TypeScript 7.0 was released on 8 July 2026](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/) as a native port of the compiler that Microsoft describes as roughly ten times faster. The language you write is the same. Vite's React starter has a TypeScript variant:
+
+```sh
+npm create vite@latest my-app -- --template react-ts
+```
+
+Here is `MovieCard` with typed props. If you pass a rating as a string, or forget a handler, the editor and compiler tell you straight away.
+
+```tsx title="src/components/MovieCard.tsx"
+import { memo, useState } from 'react';
+
+export type Movie = {
+  id: number;
+  title: string;
+  year: number;
+  genre: string;
+  rating: number;
+};
+
+type MovieCardProps = Movie & {
+  isFavorite: boolean;
+  onToggleFavorite: (id: number) => void;
+  onRemove: (id: number) => void;
+};
+
+function MovieCard({
+  id, title, year, genre, rating, isFavorite, onToggleFavorite, onRemove,
+}: MovieCardProps) {
+  const [open, setOpen] = useState<boolean>(false);
+  // ...same JSX as before
+}
+
+export default memo(MovieCard);
+```
+
+The `: MovieCardProps` after the destructured props describes the shape of the object. `useState<boolean>` states the type of the value, although TypeScript can often work it out for itself. A good exercise is to convert Filmshelf file by file. Rename `.jsx` to `.tsx`, fix the errors the compiler reports, and run the tests after each change.
+
+<Aside type="tip" title="Frameworks and the React docs">
+The official React documentation at [react.dev](https://react.dev/learn) has a section on starting a project with a framework. Whether you choose Vite (as this guide does) or a framework such as Next.js depends on the project. For a public site where search ranking matters, lean towards a framework with server rendering.
+</Aside>
+
+## A learning order that works
+
+1. **Finish a project of your own** using only what this guide covered. Sticking to the basics makes them stick.
+2. **Add TypeScript** to that project.
+3. **Learn the browser and the server side.** Understand HTTP, build a small API (see Rapid Backend Development), and connect your React app to it.
+4. **Choose one direction**: Next.js for the web, React Native for mobile, or deepen your testing and accessibility skills.
+5. **Keep a public record.** Commit often, write a README with screenshots and a live link for every project.
+
+## Stretch goals for Filmshelf
+
+Before moving to a new project, extend this one. Each goal practises a specific skill:
+
+| Goal | Practises |
+| ---- | --------- |
+| Sort movies by title, year or rating, and keep the choice in the URL | `useSearchParams`, derived data |
+| Edit an existing movie on its own page | Routes, React Hook Form with default values, mutations |
+| Make add and delete feel instant, and roll back on failure | TanStack Query optimistic updates |
+| Follow the operating system's dark-mode setting by default | `window.matchMedia`, effects with cleanup |
+| Paginate or virtualise a list of 1,000 generated movies | Performance, `useMemo` |
+| Add a Playwright test for the add-a-movie journey | End-to-end testing |
+| Convert the project to TypeScript | Types, props, generics |
+| Run a Lighthouse audit and fix every accessibility issue | Accessibility, semantics |
+| Deploy a second copy to Netlify, Vercel or Cloudflare Pages | Hosting differences |
+| Replace `movies.json` with a real API you built | Fetching, errors, deployment |
+
+## Project ideas
+
+These ideas come from the project list in the JSMastery guide. They are grouped by how much of this guide they exercise. Pick one, shrink it until it is a weekend's work, and finish it before you start the next.
+
+### Start here
+
+Mostly layout, styling and components. Practise Lessons 3 to 8.
+
+- Portfolio Website
+- Google Search Clone
+- SaaS Landing Page
+- Nike Shoes Landing Page
+- Apple Landing Page
+- Premium Landing Page
+- Modern UI/UX Website
+- Awwwards Website Clone
+
+### Level up
+
+Real data, routing and forms. Practise Lessons 9 to 14.
+
+- Cryptocurrency App
+- Travel Companion App
+- Real Estate App
+- Blog App with CMS
+- ECommerce Web Shop
+- Voice Powered Budget Tracker
+- Voice Assistant News App
+- Real-Time Dashboard
+
+### Stretch yourself
+
+Shared state, real-time features and production concerns. Practise Lessons 15 to 17, and expect to learn new tools.
+
+- Social Media Platform
+- Social Media Web App
+- Chat App
+- Video Chat App
+- Progressive Web Apps
+- AI SaaS Application
+- 3D Portfolio
+- 3d T-Shirt Ecommerce App
+
+### Make a project portfolio-ready
+
+A project helps your job search when someone can understand and try it in under a minute.
+
+- **A live link** that works on a phone. Lesson 17 shows how.
+- **A README** with a screenshot, what the app does, the tools you used, and how to run it.
+- **Tests and a passing build** badge in the repository.
+- **A clear commit history** with short messages that say what changed.
+- **One thing you are proud of** that you can explain in an interview, such as why you put the genre in the URL or how the cache avoids a second request.
+
+## Keep learning
+
+- [react.dev](https://react.dev/learn): the official documentation, with interactive examples and a "Thinking in React" guide.
+- [MDN Web Docs](https://developer.mozilla.org/): the reference for JavaScript, HTML, CSS and browser APIs.
+- Read the documentation for each library you use: [React Router](https://reactrouter.com), [TanStack Query](https://tanstack.com/query/latest), [Redux Toolkit](https://redux-toolkit.js.org), [Testing Library](https://testing-library.com) and [Vite](https://vite.dev).
+- Install the **React Developer Tools** browser extension. Its Components tab shows props and state, and its Profiler tab shows what re-rendered and why.
+- Read other people's code on GitHub, and build things you actually want to use.
+
+## Check yourself
+
+1. Pick three lessons from this guide and describe, in one sentence each, a bug or problem that each one helps prevent.
+2. What does TypeScript add to a React project, and what does it not change at runtime?
+3. Choose a project idea from the list and write down its pages, its server state, its client state, and which three lessons you would reread first.
+
+<details>
+<summary>Answers</summary>
+
+Answers will differ, but here are examples.
+
+1. Lesson 8: using stable keys prevents form text from jumping to the wrong list item. Lesson 9: cleanup functions prevent timers and listeners from piling up. Lesson 16: tests catch a refactor that quietly breaks the add-movie form.
+2. TypeScript checks types while you write code and when you build, so mistakes such as a wrong prop type or a missing field are caught early. The types are removed during the build, so the code that runs in the browser is plain JavaScript.
+3. For a Cryptocurrency App: pages are a coin list, a coin detail page and a favorites page. Server state is the price data (TanStack Query). Client state is the selected currency, the search text and the watchlist (Redux Toolkit or a small context). Reread Lessons 13, 14 and 15.
+
+</details>

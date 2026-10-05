@@ -1,0 +1,352 @@
+---
+title: "11. useReducer and Custom Hooks"
+description: "Organise complex state with a reducer, then package reusable logic into your own hooks."
+difficulty: intermediate
+readingTime: 22
+tags: [react, hooks, usereducer, custom-hooks]
+sidebar:
+  order: 11
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+`App` has grown. It holds the movie list and its loading state, the favorites, the search text and the genre, and it contains functions that update all of them. This lesson introduces two tools for organising that code: **`useReducer`** for state with many related changes, and **custom hooks** for reusable logic.
+
+## useReducer
+
+`useState` is ideal for a single value. When several pieces of state change together, or when the same state is updated in many different ways, the update logic gets scattered across handlers. A **reducer** moves it all into one function.
+
+A reducer takes the current state and an **action** (a plain object describing what happened) and returns the next state.
+
+```js
+function reducer(state, action) {
+  // return the new state
+}
+```
+
+Reducers must be **pure**. They only calculate the result from their two inputs: no fetching, no random numbers, no changing the old state. Return a new object instead.
+
+### A reducer for the movie list
+
+```js title="src/state/moviesReducer.js"
+export const initialState = { items: [], status: 'loading', error: null };
+
+export function moviesReducer(state, action) {
+  switch (action.type) {
+    case 'loaded':
+      return { items: action.movies, status: 'success', error: null };
+    case 'failed':
+      return { ...state, status: 'error', error: action.message };
+    case 'added': {
+      const nextId = Math.max(0, ...state.items.map((movie) => movie.id)) + 1;
+      return { ...state, items: [...state.items, { ...action.movie, id: nextId }] };
+    }
+    case 'removed':
+      return { ...state, items: state.items.filter((movie) => movie.id !== action.id) };
+    default:
+      throw new Error(`Unknown action: ${action.type}`);
+  }
+}
+```
+
+Each `case` describes one thing that can happen. Name actions after what happened (`'added'`, `'removed'`), not after the setter you would call. The `default` branch throws, so a typo in an action name fails loudly.
+
+Because a reducer is just a function, you can test it without rendering anything:
+
+```js
+const state = moviesReducer(initialState, { type: 'loaded', movies: [] });
+// { items: [], status: 'success', error: null }
+```
+
+### Using it in a component
+
+```jsx
+import { useReducer } from 'react';
+import { initialState, moviesReducer } from '../state/moviesReducer.js';
+
+const [state, dispatch] = useReducer(moviesReducer, initialState);
+
+dispatch({ type: 'added', movie: { title: 'Night Bus', year: 2025, genre: 'Comedy', rating: 7 } });
+dispatch({ type: 'removed', id: 3 });
+```
+
+`useReducer` returns the current `state` and a `dispatch` function. Calling `dispatch(action)` runs the reducer and re-renders with the result. React guarantees that `dispatch` is the same function on every render.
+
+### useState or useReducer?
+
+| Prefer `useState` when | Prefer `useReducer` when |
+| ---------------------- | ------------------------ |
+| One value or a few independent values | Several values change together |
+| Updates are simple assignments | The next state depends on rules and the action |
+| The logic is used in one place | The same logic is triggered from many places |
+
+## Custom hooks
+
+A **custom hook** is a function whose name starts with `use` and that calls other hooks. It lets you extract logic that uses state and effects so that several components can reuse it, in the same way that a component lets you reuse markup.
+
+Two things to remember:
+
+- A custom hook shares **logic**, not **state**. Each component that calls the hook gets its own separate copy of the state inside.
+- The name must start with `use`, because that is how React and the linter know to apply the rules of hooks.
+
+### useMovies: loading and changing the list
+
+This moves the fetching code from Lesson 9 and the reducer into one hook. Components only see a clean result.
+
+```js title="src/hooks/useMovies.js"
+import { useEffect, useReducer } from 'react';
+import { initialState, moviesReducer } from '../state/moviesReducer.js';
+
+export default function useMovies() {
+  const [state, dispatch] = useReducer(moviesReducer, initialState);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadMovies() {
+      try {
+        const response = await fetch(`${import.meta.env.BASE_URL}movies.json`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+        dispatch({ type: 'loaded', movies: await response.json() });
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        dispatch({ type: 'failed', message: err.message });
+      }
+    }
+
+    loadMovies();
+    return () => controller.abort();
+  }, []);
+
+  return {
+    movies: state.items,
+    status: state.status,
+    error: state.error,
+    addMovie: (movie) => dispatch({ type: 'added', movie }),
+    removeMovie: (id) => dispatch({ type: 'removed', id }),
+  };
+}
+```
+
+### useLocalStorage: state that survives a refresh
+
+`useLocalStorage` works like `useState` but saves the value in the browser, so favorites are still there after a reload.
+
+```js title="src/hooks/useLocalStorage.js"
+import { useEffect, useState } from 'react';
+
+export default function useLocalStorage(key, initialValue) {
+  const [value, setValue] = useState(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored === null ? initialValue : JSON.parse(stored);
+    } catch {
+      return initialValue; // storage blocked or the saved text is not valid JSON
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(key, JSON.stringify(value));
+  }, [key, value]);
+
+  return [value, setValue];
+}
+```
+
+Passing a **function** to `useState` (a lazy initializer) means the storage is read only on the first render and not on every render.
+
+### useDebounce: wait until the user pauses
+
+```js title="src/hooks/useDebounce.js"
+import { useEffect, useState } from 'react';
+
+export default function useDebounce(value, delay = 300) {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+
+  return debounced;
+}
+```
+
+Each time `value` changes, the effect starts a timer. If the value changes again before the timer finishes, the cleanup cancels it. The returned value only updates after the input has been still for `delay` milliseconds.
+
+Filtering eight movies is instant, so debouncing is not needed here. It becomes useful when each keystroke would start a network request. It is used here so you can see the pattern.
+
+## Put it together
+
+First, give each card a Delete button. `MovieCard` receives a new `onRemove` prop:
+
+```jsx title="src/components/MovieCard.jsx (additions)"
+export default function MovieCard({
+  // ...the existing props
+  onRemove,
+}) {
+  return (
+    <article className={styles.card}>
+      {/* ...title, details and the favorite button stay the same */}
+      <button type="button" className={styles.button} onClick={() => onRemove(id)}>
+        Delete
+      </button>
+    </article>
+  );
+}
+```
+
+```jsx title="src/components/MovieList.jsx (changes)"
+export default function MovieList({ movies, favoriteIds, onToggleFavorite, onRemove }) {
+  // ...
+  <MovieCard
+    {...movie}
+    isFavorite={favoriteIds.includes(movie.id)}
+    onToggleFavorite={onToggleFavorite}
+    onRemove={onRemove}
+  />
+}
+```
+
+Now `App` becomes much shorter. It uses the three hooks and focuses on how the pieces fit together:
+
+```jsx title="src/App.jsx"
+import { useState } from 'react';
+import Header from './components/Header.jsx';
+import Sidebar from './components/Sidebar.jsx';
+import SearchBar from './components/SearchBar.jsx';
+import Panel from './components/Panel.jsx';
+import MovieList from './components/MovieList.jsx';
+import AddMovieForm from './components/AddMovieForm.jsx';
+import useMovies from './hooks/useMovies.js';
+import useLocalStorage from './hooks/useLocalStorage.js';
+import useDebounce from './hooks/useDebounce.js';
+
+export default function App() {
+  const { movies, status, error, addMovie, removeMovie } = useMovies();
+  const [favoriteIds, setFavoriteIds] = useLocalStorage('filmshelf:favorites', []);
+  const [query, setQuery] = useState('');
+  const [genre, setGenre] = useState('All');
+  const debouncedQuery = useDebounce(query, 250);
+
+  const visibleMovies = movies.filter(
+    (movie) =>
+      (genre === 'All' || movie.genre === genre) &&
+      movie.title.toLowerCase().includes(debouncedQuery.trim().toLowerCase()),
+  );
+  const isFiltering = query !== '' || genre !== 'All';
+
+  function toggleFavorite(id) {
+    setFavoriteIds((ids) =>
+      ids.includes(id) ? ids.filter((existing) => existing !== id) : [...ids, id],
+    );
+  }
+
+  function handleRemove(id) {
+    removeMovie(id);
+    setFavoriteIds((ids) => ids.filter((existing) => existing !== id));
+  }
+
+  function clearFilters() {
+    setQuery('');
+    setGenre('All');
+  }
+
+  let content;
+  if (status === 'loading') {
+    content = <p>Loading movies...</p>;
+  } else if (status === 'error') {
+    content = <p role="alert">Could not load movies: {error}</p>;
+  } else {
+    content = (
+      <MovieList
+        movies={visibleMovies}
+        favoriteIds={favoriteIds}
+        onToggleFavorite={toggleFavorite}
+        onRemove={handleRemove}
+      />
+    );
+  }
+
+  return (
+    <>
+      <Header />
+      <div className="layout">
+        <Sidebar selectedGenre={genre} onSelectGenre={setGenre} />
+        <main>
+          <SearchBar value={query} onChange={setQuery} />
+          <Panel title={genre === 'All' ? 'All movies' : genre}>
+            {favoriteIds.length > 0 ? (
+              <p>Favorites: {favoriteIds.length}</p>
+            ) : (
+              <p>No favorites yet. Add one with the button on a card.</p>
+            )}
+            {isFiltering && (
+              <button type="button" onClick={clearFilters}>
+                Clear filters
+              </button>
+            )}
+            {content}
+          </Panel>
+          <AddMovieForm onAdd={addMovie} />
+        </main>
+      </div>
+    </>
+  );
+}
+```
+
+Notice `handleRemove`: deleting a movie also removes it from the favorites, so the favorites count never includes a movie that no longer exists. This is the kind of coordination that belongs in the component that owns both pieces of state.
+
+Reload the page after marking some favorites. They are still there, because `useLocalStorage` restored them.
+
+The same hook fixes a small annoyance from Lesson 10: the dark theme resets on every reload. In `ThemeProvider`, replace `useState` with `useLocalStorage`:
+
+```jsx title="src/context/ThemeProvider.jsx (changes)"
+import { useEffect } from 'react';
+import useLocalStorage from '../hooks/useLocalStorage.js';
+import { ThemeContext } from './ThemeContext.js';
+
+export default function ThemeProvider({ children }) {
+  const [theme, setTheme] = useLocalStorage('filmshelf:theme', 'light');
+  // ...the effect, toggleTheme and the return stay the same
+}
+```
+
+Because the logic lives in a custom hook, that is a two-line change.
+
+<Aside type="tip" title="Reducers and context together">
+When many components need the same reducer-managed state, you can create a context for the `state` and another for the `dispatch` function and provide both from one component. That combination is a built-in alternative to a state library for medium-sized apps. Lesson 15 shows when a library like Redux Toolkit is worth it.
+</Aside>
+
+## Check yourself
+
+1. Add a `'cleared'` action to `moviesReducer` that empties `items`.
+2. Write a `useToggle(initial = false)` hook that returns `[value, toggle]`.
+3. If two components both call `useLocalStorage('theme', 'light')`, do they share one state?
+4. Why must a reducer not call `fetch`?
+
+<details>
+<summary>Answers</summary>
+
+```js
+// 1: add a case to the switch
+case 'cleared':
+  return { ...state, items: [] };
+
+// 2
+import { useState } from 'react';
+
+export default function useToggle(initial = false) {
+  const [value, setValue] = useState(initial);
+  const toggle = () => setValue((current) => !current);
+  return [value, toggle];
+}
+```
+
+3. No. Each call to a hook creates its own state, so they only share what is stored under the same key in `localStorage`, and the two copies will not update each other until a reload. To share live state, put it in a context or lift it to a parent.
+4. A reducer must be pure: the same state and action must always produce the same result, with no side effects. Fetching is a side effect, so it belongs in an effect or event handler, which then dispatches the result.
+
+</details>

@@ -1,0 +1,204 @@
+---
+title: "9. Files and CSV"
+description: "Read and write text files, handle missing files, and analyze tabular data with the csv module."
+difficulty: intermediate
+readingTime: 14
+tags: [python, files, csv]
+sidebar:
+  order: 9
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Variables disappear when a program ends. Files let your data **persist**: saved scores, logs, settings, and datasets you download.
+
+## Opening files safely
+
+Use `with open(...)`. It closes the file for you even if an error happens.
+
+```python
+with open("notes.txt", "r") as file:      # "r" = read (the default)
+    text = file.read()
+print(text)
+```
+
+| Mode | Meaning |
+| ---- | ------- |
+| `"r"` | Read. Fails if the file does not exist. |
+| `"w"` | Write. Creates the file, or **erases** an existing one. |
+| `"a"` | Append. Adds to the end, creating the file if needed. |
+
+Always add `encoding="utf-8"` for text so special characters behave the same on every computer.
+
+## Writing
+
+```python
+lines = ["Day 1: set up Python", "Day 2: wrote loops"]
+
+with open("journal.txt", "w", encoding="utf-8") as file:
+    for line in lines:
+        file.write(line + "\n")          # write does NOT add a newline for you
+
+with open("journal.txt", "a", encoding="utf-8") as file:
+    print("Day 3: read files", file=file)   # print can write to a file too, and adds the newline
+```
+
+## Reading
+
+```python
+with open("journal.txt", "r", encoding="utf-8") as file:
+    everything = file.read()             # one big string
+
+with open("journal.txt", "r", encoding="utf-8") as file:
+    for line in file:                    # one line at a time: best for large files
+        print(line.strip())              # .strip() removes the trailing newline
+
+with open("journal.txt", "r", encoding="utf-8") as file:
+    all_lines = file.readlines()         # a list of lines
+```
+
+## When the file is missing
+
+```python
+def load_journal(path):
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            return file.read().splitlines()
+    except FileNotFoundError:
+        return []                        # first run: nothing saved yet
+
+entries = load_journal("journal.txt")
+print(f"{len(entries)} entries")
+```
+
+## A complete example: a tiny journal
+
+```python title="journal.py"
+FILE = "journal.txt"
+
+def load():
+    try:
+        with open(FILE, "r", encoding="utf-8") as file:
+            return file.read().splitlines()
+    except FileNotFoundError:
+        return []
+
+def add(entry):
+    with open(FILE, "a", encoding="utf-8") as file:
+        file.write(entry + "\n")
+
+def main():
+    for number, line in enumerate(load(), start=1):
+        print(f"{number}. {line}")
+    new_entry = input("New entry (blank to skip): ").strip()
+    if new_entry:
+        add(new_entry)
+
+if __name__ == "__main__":
+    main()
+```
+
+## CSV files
+
+A CSV (comma-separated values) file is a table stored as text. The first row is usually the column names.
+
+```text title="teams.csv"
+team,wins,losses
+Oilers,48,26
+Flames,38,34
+Canucks,50,23
+```
+
+### Reading rows as dictionaries
+
+`csv.DictReader` turns each row into a dictionary keyed by the column names. Everything arrives as **text**, so convert numbers yourself.
+
+```python
+import csv
+
+def read_teams(path):
+    teams = []
+    try:
+        with open(path, "r", newline="", encoding="utf-8") as file:
+            for row in csv.DictReader(file):
+                row["wins"] = int(row["wins"])        # convert from text
+                row["losses"] = int(row["losses"])
+                teams.append(row)
+    except FileNotFoundError:
+        print(f"Could not find {path}")
+    return teams
+
+teams = read_teams("teams.csv")
+best = max(teams, key=lambda team: team["wins"])
+print(f"Most wins: {best['team']} ({best['wins']})")
+```
+
+Always pass `newline=""` when using the `csv` module so line endings are handled correctly.
+
+### Writing rows
+
+```python
+import csv
+
+rows = [
+    {"team": "Oilers", "wins": 48, "losses": 26},
+    {"team": "Flames", "wins": 38, "losses": 34},
+]
+
+with open("teams.csv", "w", newline="", encoding="utf-8") as file:
+    writer = csv.DictWriter(file, fieldnames=["team", "wins", "losses"])
+    writer.writeheader()          # the column names row
+    writer.writerows(rows)
+```
+
+### Summarizing data
+
+```python
+total_wins = sum(team["wins"] for team in teams)
+average = total_wins / len(teams)
+print(f"Average wins: {average:.1f}")
+
+winning = [team["team"] for team in teams if team["wins"] > team["losses"]]
+print("Winning records:", ", ".join(winning))
+```
+
+<Aside type="caution" title="Opening with 'w' is destructive">
+`open("data.csv", "w")` empties the file immediately. If you want to keep existing data, read it first, or use append mode.
+</Aside>
+
+## Check yourself
+
+1. Write a program that counts the lines and words in any text file the user names, with a friendly message if it does not exist.
+2. Given `teams.csv` as above, write `summary.csv` containing each team and its win percentage (`wins / (wins + losses)`), rounded to 3 places.
+3. Why would `row["wins"] + 1` fail before the conversion step?
+
+<details>
+<summary>Solutions</summary>
+
+```python
+# 1
+path = input("File name: ")
+try:
+    with open(path, "r", encoding="utf-8") as file:
+        text = file.read()
+    print(len(text.splitlines()), "lines,", len(text.split()), "words")
+except FileNotFoundError:
+    print(f"I couldn't find {path}.")
+
+# 2
+import csv
+
+with open("teams.csv", newline="", encoding="utf-8") as src:
+    rows = list(csv.DictReader(src))
+
+with open("summary.csv", "w", newline="", encoding="utf-8") as out:
+    writer = csv.DictWriter(out, fieldnames=["team", "win_pct"])
+    writer.writeheader()
+    for row in rows:
+        wins, losses = int(row["wins"]), int(row["losses"])
+        writer.writerow({"team": row["team"], "win_pct": round(wins / (wins + losses), 3)})
+
+# 3: csv gives you strings, and "48" + 1 is a TypeError. Convert with int() first.
+```
+
+</details>

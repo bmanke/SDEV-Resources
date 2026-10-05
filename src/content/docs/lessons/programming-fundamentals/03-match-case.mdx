@@ -1,0 +1,143 @@
+---
+title: "3. Choosing with match and case"
+description: "Replace long if/elif chains with Python's structural pattern matching."
+difficulty: beginner
+readingTime: 8
+tags: [python, conditionals, match]
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+When you compare **one value** against many possibilities, a long `if/elif` chain gets repetitive. `match` and `case`
+(Python 3.10 and newer) express the same idea more clearly.
+
+## The basic shape
+
+```python title="month_name.py"
+month = int(input("Month number (1-12): "))
+
+match month:
+    case 1:
+        name = "January"
+    case 2:
+        name = "February"
+    case 3:
+        name = "March"
+    case _:                      # underscore is the default: it matches anything
+        name = "Unknown"
+
+print(name)
+```
+
+- `match` names the value to inspect.
+- Each `case` is a pattern. The first one that fits runs, and then the match is finished (no `break` needed).
+- `case _:` works like `else`.
+
+## Several values in one case
+
+Use `|` to mean "or".
+
+```python
+day = input("Day: ").lower()
+
+match day:
+    case "saturday" | "sunday":
+        print("Weekend!")
+    case "monday" | "tuesday" | "wednesday" | "thursday" | "friday":
+        print("Weekday")
+    case _:
+        print("That is not a day")
+```
+
+## Guards: adding an extra condition
+
+A `case` can have an `if` after the pattern. It only matches when both are true.
+
+```python
+status = 404
+
+match status:
+    case 200:
+        print("OK")
+    case code if 400 <= code < 500:      # capture the value as `code`, then test it
+        print(f"Client error {code}")
+    case code if 500 <= code < 600:
+        print(f"Server error {code}")
+    case _:
+        print("Something else")
+```
+
+## Matching shapes of data
+
+Patterns can also take apart tuples and lists. This is where `match` goes beyond a simple switch.
+
+```python
+command = input("Command: ").split()      # "go north" becomes ["go", "north"]
+
+match command:
+    case ["go", direction]:
+        print(f"You walk {direction}.")
+    case ["take", item]:
+        print(f"You pick up the {item}.")
+    case ["quit"]:
+        print("Bye!")
+    case _:
+        print("I don't understand.")
+```
+
+## match or if?
+
+| Use `match` when | Use `if/elif` when |
+| ---------------- | ------------------ |
+| You test one value against many fixed options | Conditions involve different variables |
+| You are reading menu choices or commands | You need ranges and compound logic everywhere |
+
+<Aside type="tip">
+A bare name in a `case` (like `case code:`) **captures** the value instead of comparing to it. To compare against a
+constant, write a literal such as `case 200:`, or a dotted name like `Color.RED`.
+</Aside>
+
+## Check yourself
+
+1. Write a calculator menu: ask for `+`, `-`, `*` or `/` and two numbers, then print the result. Handle unknown operators.
+2. Ask for a letter grade (A to F) and print a message for each. Treat `A` and `B` as "great job".
+
+<details>
+<summary>Solutions</summary>
+
+```python
+# 1
+op = input("Operator (+ - * /): ")
+a = float(input("First number: "))
+b = float(input("Second number: "))
+
+match op:
+    case "+":
+        print(a + b)
+    case "-":
+        print(a - b)
+    case "*":
+        print(a * b)
+    case "/" if b != 0:
+        print(a / b)
+    case "/":
+        print("Cannot divide by zero")
+    case _:
+        print("Unknown operator")
+
+# 2
+grade = input("Grade: ").upper()
+match grade:
+    case "A" | "B":
+        print("Great job")
+    case "C" | "D":
+        print("Keep going")
+    case "F":
+        print("Let's review together")
+    case _:
+        print("Not a valid grade")
+```
+
+</details>

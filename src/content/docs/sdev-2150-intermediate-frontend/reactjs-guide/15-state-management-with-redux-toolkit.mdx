@@ -1,0 +1,314 @@
+---
+title: "15. State Management with Redux Toolkit"
+description: "Decide when you need a state library, build a Redux Toolkit store for the favorites, and compare Redux with Zustand, Jotai, MobX and the other tools on the roadmap."
+difficulty: advanced
+readingTime: 26
+tags: [react, state-management, redux, redux-toolkit, zustand, jotai, mobx]
+sidebar:
+  order: 15
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+So far, you have placed state as close to where it is used as possible, and lifted it up when two components needed it. That scales surprisingly far. This lesson is about what to do when it stops scaling, and how Redux Toolkit, the most widely used answer on the roadmap, works.
+
+## Do you need a state library?
+
+Work through these options in order and stop at the first one that fits.
+
+| Situation | Tool |
+| --------- | ---- |
+| One component needs it | `useState` or `useReducer` inside that component |
+| A parent and a few children need it | Lift the state to the parent and pass props |
+| Many distant components read a value that rarely changes (theme, user, language) | Context (Lesson 10) |
+| Data comes from a server | TanStack Query (Lesson 14), not a state library |
+| Many components read **and update** shared client state, with many kinds of change | A state library such as Redux Toolkit |
+
+Notice how much of an app falls into the earlier rows. Do not reach for Redux because a tutorial told you to. Reach for it when prop drilling and context start to hurt.
+
+In Filmshelf, the list of **favorites** now qualifies. The header shows how many movies are favorites, the home page toggles them, and deleting a movie must remove its favorite. That is one shared list, read in two places, changed in several ways. It is a reasonable, small example for a store.
+
+## How Redux works
+
+Redux keeps all shared state in one object, the **store**, and only lets you change it in one way.
+
+```text
+  component  --dispatch(action)-->  reducer  --new state-->  store  --selector-->  component
+```
+
+| Term | Meaning |
+| ---- | ------- |
+| **Store** | The single object holding the shared state |
+| **Action** | A plain object describing what happened, such as `{ type: 'favorites/toggled', payload: 3 }` |
+| **Reducer** | A pure function `(state, action) => newState`, like the one from Lesson 11 |
+| **Dispatch** | The function that sends an action to the store |
+| **Selector** | A function that reads one piece of the state |
+| **Slice** | The state, reducers and actions for one feature, bundled together |
+
+The flow is one-directional: the UI dispatches an action, the reducer produces new state, and subscribed components re-render. Because every change goes through a reducer, you can inspect each action in the Redux DevTools browser extension and see exactly how the state got where it is.
+
+**Redux Toolkit** (RTK) is the official, recommended way to write Redux. It removes the boilerplate that made classic Redux unpopular. `react-redux` connects the store to React components.
+
+```sh
+npm install @reduxjs/toolkit react-redux
+```
+
+## Step 1: create a slice
+
+```js title="src/store/favoritesSlice.js"
+import { createSlice } from '@reduxjs/toolkit';
+
+const favoritesSlice = createSlice({
+  name: 'favorites',
+  initialState: { ids: [] },
+  reducers: {
+    // Redux Toolkit uses Immer, so "mutating" code here is safe: it produces a new state
+    toggled(state, action) {
+      const id = action.payload;
+      if (state.ids.includes(id)) {
+        state.ids = state.ids.filter((existing) => existing !== id);
+      } else {
+        state.ids.push(id);
+      }
+    },
+    removed(state, action) {
+      state.ids = state.ids.filter((existing) => existing !== action.payload);
+    },
+    cleared(state) {
+      state.ids = [];
+    },
+  },
+});
+
+export const { toggled, removed, cleared } = favoritesSlice.actions;
+export const selectFavoriteIds = (state) => state.favorites.ids;
+export default favoritesSlice.reducer;
+```
+
+`createSlice` does three jobs at once:
+
+1. It builds the **reducer** from the functions in `reducers`.
+2. It generates an **action creator** for each one: `toggled(3)` returns `{ type: 'favorites/toggled', payload: 3 }`.
+3. It namespaces the action types with the slice name, so they never clash.
+
+Inside these functions you may write `state.ids.push(id)`, which would be a bug in a normal reducer. Redux Toolkit wraps your function with a library called **Immer**. Immer hands you a draft copy, records what you changed, and produces a brand-new immutable state. The original state is never altered. This convenience works **only** inside `createSlice` (and `createReducer`), and it is the one place where changing state in place is allowed.
+
+## Step 2: create the store
+
+```js title="src/store/index.js"
+import { configureStore } from '@reduxjs/toolkit';
+import favoritesReducer from './favoritesSlice.js';
+
+const STORAGE_KEY = 'filmshelf:favorites';
+
+export function loadPreloadedState() {
+  try {
+    const ids = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    return Array.isArray(ids) ? { favorites: { ids } } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function makeStore(preloadedState) {
+  const store = configureStore({
+    reducer: { favorites: favoritesReducer },
+    preloadedState,
+  });
+
+  // Save the favorites every time the store changes
+  store.subscribe(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(store.getState().favorites.ids));
+  });
+
+  return store;
+}
+```
+
+- `configureStore` combines the slice reducers (each key under `reducer` becomes a part of the state) and adds DevTools support and development-time checks for common mistakes.
+- `preloadedState` is the starting state. `loadPreloadedState` reads the saved favorites, and it ignores missing or corrupted data instead of crashing.
+- `store.subscribe` runs after each change, which is how the favorites are saved. This replaces the `useLocalStorage` call that `HomePage` used. For bigger apps a library called `redux-persist` handles this.
+- The store is created by a **function** (`makeStore`) so that tests can build a fresh one for each test (Lesson 16).
+
+## Step 3: provide the store
+
+Add `Provider` from `react-redux` at the top of the app, the same way you added the query client.
+
+```jsx title="src/main.jsx"
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { Provider } from 'react-redux';
+import { BrowserRouter } from 'react-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import './index.css';
+import App from './App.jsx';
+import ThemeProvider from './context/ThemeProvider.jsx';
+import { loadPreloadedState, makeStore } from './store/index.js';
+
+const queryClient = new QueryClient();
+const store = makeStore(loadPreloadedState());
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <Provider store={store}>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter basename={import.meta.env.BASE_URL}>
+          <ThemeProvider>
+            <App />
+          </ThemeProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </Provider>
+  </StrictMode>,
+);
+```
+
+## Step 4: read and update the store
+
+Two hooks connect components to the store:
+
+- **`useSelector(selector)`** reads a value. The component re-renders only when the selected value changes.
+- **`useDispatch()`** returns `dispatch`, which you call with an action.
+
+The header now shows the count, wherever the user is in the app:
+
+```jsx title="src/components/Header.jsx"
+import { useSelector } from 'react-redux';
+import { NavLink } from 'react-router';
+import { useTheme } from '../context/ThemeContext.js';
+import { selectFavoriteIds } from '../store/favoritesSlice.js';
+
+export default function Header() {
+  const { theme, toggleTheme } = useTheme();
+  const favoriteCount = useSelector(selectFavoriteIds).length;
+
+  return (
+    <header className="header">
+      <h1>Filmshelf</h1>
+      <p>Your personal movie tracker</p>
+      <nav aria-label="Main">
+        <NavLink to="/" end>
+          Home
+        </NavLink>
+      </nav>
+      <p aria-live="polite">Favorites: {favoriteCount}</p>
+      <button type="button" onClick={toggleTheme}>
+        {theme === 'light' ? 'Dark mode' : 'Light mode'}
+      </button>
+    </header>
+  );
+}
+```
+
+`aria-live="polite"` makes a screen reader announce the new count when it changes.
+
+`HomePage` swaps its `useLocalStorage` call for the store. Everything else is unchanged.
+
+```jsx title="src/pages/HomePage.jsx (changes)"
+import { useDispatch, useSelector } from 'react-redux';
+import { removed, selectFavoriteIds, toggled } from '../store/favoritesSlice.js';
+// remove: import useLocalStorage from '../hooks/useLocalStorage.js';
+
+export default function HomePage() {
+  const { movies, isPending, isError, error, addMovie, removeMovie } = useMovies();
+  const favoriteIds = useSelector(selectFavoriteIds);
+  const dispatch = useDispatch();
+  // ...query, debouncedQuery and genre stay the same
+
+  const toggleFavorite = useCallback((id) => dispatch(toggled(id)), [dispatch]);
+
+  const handleRemove = useCallback(
+    (id) => {
+      removeMovie(id);
+      dispatch(removed(id));
+    },
+    [removeMovie, dispatch],
+  );
+
+  // ...and delete the "Favorites: N" paragraph from the Panel, since the header shows it now
+}
+```
+
+`dispatch` never changes identity, so `useCallback` keeps `MovieCard` memoized, just as in Lesson 12.
+
+Try it: mark a few favorites, then click a movie title and look at the header on the detail page. The count follows you around, with no props passed through any component. Reload the page, and it is still there.
+
+### Selectors
+
+A selector is a function that takes the whole state and returns the part you need. Write them next to the slice (`selectFavoriteIds`), and the components never need to know the shape of the state.
+
+`useSelector` compares the result of your selector with `===`. A selector such as `(state) => state.favorites.ids` returns the same array reference until it changes, which is ideal. A selector that builds a new array or object every time, such as `(state) => state.favorites.ids.map(...)`, makes the component re-render on every store update. Select the raw value and do the calculation in the component, or use `createSelector` (from Redux Toolkit) to memoize it.
+
+## Redux guidelines
+
+- **Put shared client state in Redux, and leave the rest alone.** Form fields, whether a menu is open, and server data (use TanStack Query) usually do not belong in the store.
+- **Keep state serializable.** Store plain objects, arrays, strings, numbers and booleans, not functions, class instances or promises.
+- **Name actions after events** (`toggled`, `removed`) as you did with the reducer in Lesson 11, rather than as setters.
+- **Write many small slices** and combine them in `configureStore`.
+- Redux Toolkit also includes `createAsyncThunk` and RTK Query for fetching data. This guide uses TanStack Query for that job, but both are valid choices.
+
+## Other state management tools
+
+The roadmap lists Redux, MobX, Hookstate, Recoil and Akita. Here is how they stand today. Release dates were checked on npm in October 2026.
+
+| Tool | Idea | Status |
+| ---- | ---- | ------ |
+| **Redux Toolkit** | One store, explicit actions and reducers | Active. Version 2.13 released September 2026 |
+| **Zustand** | A small store created with one function, no providers | Active. Version 5.0.15 released August 2026 |
+| **Jotai** | Tiny pieces of state called atoms, combined as needed | Active. Version 3.0.1 released September 2026 |
+| **MobX** | Observable objects that update the UI automatically | Active. Version 7.0.6 released October 2026 |
+| **Hookstate** | A `useState` that can be shared globally | Latest release (4.0.2) was March 2025, so updates are infrequent |
+| **Recoil** | Atoms and selectors from Meta | [The repository was archived on 1 January 2025](https://github.com/facebookexperimental/Recoil/issues/1495), and its last npm release was in March 2023. Do not start new projects with it |
+| **Akita** | An RxJS-based store, popular with Angular | Last release (8.0.1) was February 2023, and [its README recommends the newer Elf library](https://npm.io/package/@datorama/akita) |
+
+Of the alternatives, Zustand and Jotai are the ones people most often pick when Redux feels like too much. The same favorites feature in Zustand is a single file:
+
+```js title="src/store/useFavorites.js"
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+const useFavorites = create(
+  persist(
+    (set) => ({
+      ids: [],
+      toggle: (id) =>
+        set((state) => ({
+          ids: state.ids.includes(id) ? state.ids.filter((existing) => existing !== id) : [...state.ids, id],
+        })),
+    }),
+    { name: 'filmshelf:favorites' },
+  ),
+);
+
+export default useFavorites;
+```
+
+```jsx
+const count = useFavorites((state) => state.ids.length);
+const toggle = useFavorites((state) => state.toggle);
+```
+
+There is no provider and no separate action creators, and the `persist` middleware handles saving. The trade-off is that Redux gives you stricter conventions, richer DevTools and a very large ecosystem, which matter more on big teams. Both approaches work. Learn the concepts of one, and the others will be easy to pick up.
+
+## Check yourself
+
+1. In which of these cases is a state library probably justified? (a) A modal's open/closed flag, (b) the signed-in user's cart used in six pages, (c) the list of products from an API.
+2. Why can you write `state.ids.push(id)` inside `createSlice` but not in a reducer from Lesson 11?
+3. Add a `clearFavorites` button to the header that empties the favorites using the slice.
+4. What does `useSelector((state) => state.favorites.ids.filter((id) => id > 2))` do badly?
+
+<details>
+<summary>Answers</summary>
+
+1. (b). The modal flag is local state, and (c) is server state, which belongs in TanStack Query.
+2. `createSlice` uses Immer, which gives you a draft, tracks your changes and produces a new immutable state. A hand-written reducer has no draft, so `push` would change the old state in place and React or Redux could miss the update.
+3. ```jsx
+   import { useDispatch } from 'react-redux';
+   import { cleared } from '../store/favoritesSlice.js';
+
+   const dispatch = useDispatch();
+   <button type="button" onClick={() => dispatch(cleared())}>Clear favorites</button>
+   ```
+4. `filter` returns a new array each time, so `===` says it changed and the component re-renders after every store update, even when the favorites did not change. Select the original array, then filter in the component (or in `useMemo`), or use `createSelector`.
+
+</details>

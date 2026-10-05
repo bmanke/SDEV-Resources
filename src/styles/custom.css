@@ -51,3 +51,13 @@
 .hero h1 {
 	letter-spacing: -0.02em;
 }
+
+/* Show code exactly as it is typed: JetBrains Mono's ligatures would draw
+   == as a single glyph and >= as a "≥", which confuses beginners. */
+code,
+pre,
+kbd,
+samp {
+	font-variant-ligatures: none;
+	font-feature-settings: 'liga' 0, 'calt' 0;
+}

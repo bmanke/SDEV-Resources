@@ -1,0 +1,242 @@
+---
+title: "11. Web Components: Properties, Lifecycle and Events"
+description: "Make components configurable with attributes and properties, react to changes, and talk back with custom events."
+difficulty: advanced
+readingTime: 18
+tags: [javascript, web-components, events]
+sidebar:
+  order: 11
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A static component is only half useful. Real components receive **data** (through attributes and properties), respond to
+**lifecycle** moments, and report **actions** back to the page through events. A rule of thumb used throughout is
+"data flows down, events flow up".
+
+## Attributes versus properties
+
+| | Attribute | Property |
+| - | --------- | -------- |
+| Where | In HTML: `<book-card title="Dune">` | On the JS object: `card.title = 'Dune'` |
+| Type | Always a string | Any value: numbers, arrays, objects |
+| Best for | Simple settings and styling hooks | Rich data |
+
+A good component supports both, keeping them in sync.
+
+## Lifecycle callbacks
+
+| Callback | Runs when |
+| -------- | --------- |
+| `constructor()` | The element is created. Set up the shadow root. Do not read attributes or touch children yet. |
+| `connectedCallback()` | It is added to the document. Render and add global listeners here. |
+| `disconnectedCallback()` | It is removed. Clean up timers and global listeners. |
+| `attributeChangedCallback(name, oldValue, newValue)` | An **observed** attribute changes |
+| `static get observedAttributes()` | Lists which attributes to watch |
+
+## A configurable component
+
+```js title="src/components/book-card.js"
+const template = document.createElement('template');
+template.innerHTML = `
+  <style>
+    :host { display: block; }
+    :host([read]) .title { text-decoration: line-through; opacity: 0.7; }
+    .card {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 1rem;
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .title { font-weight: bold; }
+    .meta { color: #555; font-size: 0.9rem; }
+  </style>
+  <div class="card">
+    <div>
+      <div class="title"></div>
+      <div class="meta"></div>
+    </div>
+    <button type="button">Mark as read</button>
+  </div>
+`;
+
+class BookCard extends HTMLElement {
+  static get observedAttributes() {
+    return ['title', 'author', 'read'];          // attributes we react to
+  }
+
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' }).append(template.content.cloneNode(true));
+    this.titleEl = this.shadowRoot.querySelector('.title');
+    this.metaEl = this.shadowRoot.querySelector('.meta');
+    this.button = this.shadowRoot.querySelector('button');
+  }
+
+  connectedCallback() {
+    this.button.addEventListener('click', this.#onClick);
+    this.#render();
+  }
+
+  disconnectedCallback() {
+    this.button.removeEventListener('click', this.#onClick);
+  }
+
+  attributeChangedCallback() {
+    this.#render();                              // any observed attribute changed: redraw
+  }
+
+  // Properties that mirror attributes
+  get title() {
+    return this.getAttribute('title') ?? '';
+  }
+  set title(value) {
+    this.setAttribute('title', value);
+  }
+
+  get author() {
+    return this.getAttribute('author') ?? '';
+  }
+  set author(value) {
+    this.setAttribute('author', value);
+  }
+
+  get read() {
+    return this.hasAttribute('read');            // boolean attribute: present or absent
+  }
+  set read(value) {
+    this.toggleAttribute('read', Boolean(value));
+  }
+
+  #render() {
+    this.titleEl.textContent = this.title;
+    this.metaEl.textContent = this.author ? `by ${this.author}` : '';
+    this.button.hidden = this.read;
+  }
+
+  #onClick = () => {
+    // Report what happened. The page decides what to do about it.
+    this.dispatchEvent(
+      new CustomEvent('book-read', {
+        detail: { title: this.title },           // any extra data goes in detail
+        bubbles: true,                           // let it travel up the tree
+        composed: true,                          // and out of the shadow DOM
+      }),
+    );
+  };
+}
+
+customElements.define('book-card', BookCard);
+```
+
+Using it:
+
+```html
+<book-card title="The Legend of Hyrule" author="Zelda"></book-card>
+<book-card title="Ganon Chronicles" author="Ganondorf" read></book-card>
+
+<script type="module" src="/src/components/book-card.js"></script>
+<script type="module">
+  document.addEventListener('book-read', (event) => {
+    console.log(`Finished: ${event.detail.title}`);
+    event.target.read = true;                    // update the component through its property
+  });
+</script>
+```
+
+```js
+const card = document.createElement('book-card');
+card.title = 'Dune';                  // property setter updates the attribute and redraws
+card.author = 'Frank Herbert';
+document.querySelector('main').append(card);
+```
+
+Notes on the choices above:
+
+- `this.#render()` uses a **private method** (`#`), which keeps internals out of reach.
+- The `read` attribute is a **boolean attribute**: presence means true, like `disabled` on a button.
+- `textContent` is used instead of `innerHTML` to render values, so attribute text can never inject HTML.
+- The listener is added in `connectedCallback` and removed in `disconnectedCallback`, so nothing leaks if the card is removed.
+
+## Custom events
+
+`CustomEvent` is how a component announces something.
+
+```js
+this.dispatchEvent(
+  new CustomEvent('book-read', {
+    detail: { title: 'Dune' },
+    bubbles: true,
+    composed: true,
+  }),
+);
+```
+
+| Option | Meaning |
+| ------ | ------- |
+| `detail` | Your data, available as `event.detail` |
+| `bubbles` | The event travels up through parent elements (needed for delegation) |
+| `composed` | The event can cross the shadow boundary. Without it, listeners outside the component never hear it. |
+
+Name events with lowercase and hyphens, and describe what happened (`book-read`, `quantity-change`), not what to do.
+
+## Passing rich data with properties
+
+Attributes are strings, so objects and arrays go through properties.
+
+```js
+class BookList extends HTMLElement {
+  #books = [];
+
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+  }
+
+  set books(value) {
+    this.#books = Array.isArray(value) ? value : [];
+    this.#render();
+  }
+  get books() {
+    return this.#books;
+  }
+
+  #render() {
+    const list = document.createElement('ul');
+    for (const book of this.#books) {
+      const item = document.createElement('li');
+      item.textContent = `${book.title} (${book.year})`;
+      list.append(item);
+    }
+    this.shadowRoot.replaceChildren(list);
+  }
+}
+customElements.define('book-list', BookList);
+```
+
+```js
+const listEl = document.querySelector('book-list');
+listEl.books = await getBooks();       // from lesson 9
+```
+
+<Aside type="caution" title="Do not trust the order of things">
+When the HTML is parsed, an element might be created before its attributes or children exist. Do your work in `connectedCallback`, and be ready for `attributeChangedCallback` to run before it. Make `#render` safe to call at any time.
+</Aside>
+
+## Check yourself
+
+1. Add a `rating` attribute (a number 0 to 5) to `book-card` that shows stars. Which parts of the class need to change?
+2. A teammate dispatches `new CustomEvent('done')` from inside a shadow root but the page never receives it. Why?
+3. Why is the listener removed in `disconnectedCallback`?
+
+<details>
+<summary>Answers</summary>
+
+1. Add `'rating'` to `observedAttributes`, add a getter/setter (convert with `Number(...)`), and extend `#render` to write `'★'.repeat(rating)` into the template (for example into a new `.stars` element).
+2. The event was created without `bubbles: true` and `composed: true`, so it stays inside the shadow tree.
+3. If the element is removed and re-added, `connectedCallback` runs again and would add a second listener. Cleaning up avoids duplicates and memory leaks, especially for listeners on `document` or `window`.
+
+</details>

@@ -1,0 +1,302 @@
+---
+title: "14. API Authentication, Permissions and Custom Actions"
+description: "Secure your API with token authentication, built-in and custom permissions, owner-only objects, filtering and extra endpoints."
+difficulty: advanced
+readingTime: 19
+tags: [django, drf, api, authentication, permissions, tokens]
+sidebar:
+  order: 14
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Browsers can prove who they are with a session cookie. Mobile apps, scripts and JavaScript frontends on another domain
+usually send a **token** with each request instead. This lesson adds token authentication, tightens permissions, and
+builds the review endpoints.
+
+## Authentication and permissions in DRF
+
+Every API request passes two checks, in this order:
+
+1. **Authentication classes** work out who the caller is and set `request.user`.
+2. **Permission classes** decide if that caller may do this action.
+
+| Failure | Status |
+| ------- | ------ |
+| Not authenticated, and permission needs a user | `401` (when the authenticator provides a challenge header) or `403` |
+| Authenticated but not permitted | `403` |
+
+## Token authentication
+
+DRF's built-in `TokenAuthentication` stores one random token per user in the database.
+
+```python title="bookclub/settings.py (excerpt)"
+INSTALLED_APPS = [
+    # ...
+    'rest_framework',
+    'rest_framework.authtoken',        # adds the Token model (run migrate afterwards)
+]
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",     # for the browsable API
+        "rest_framework.authentication.TokenAuthentication",       # for scripts and apps
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticatedOrReadOnly",
+    ],
+    "DEFAULT_FILTER_BACKENDS": [
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 10,
+}
+```
+
+```sh
+python manage.py migrate
+```
+
+DRF includes a login view that exchanges a username and password for a token. Add it to the API routes (the full file is below).
+
+```sh
+curl -X POST http://127.0.0.1:8000/api/token/ \
+     -H "Content-Type: application/json" \
+     -d '{"username": "mia", "password": "secret-pass-123"}'
+```
+
+```json
+{"token": "9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b"}
+```
+
+Send the token in the `Authorization` header on every later request. The word `Token` and a space come first:
+
+```sh
+curl http://127.0.0.1:8000/api/me/reviews/ -H "Authorization: Token 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b"
+```
+
+You can also create a token yourself: `Token.objects.get_or_create(user=user)`.
+
+<Aside type="caution" title="Tokens are passwords">
+Anyone holding a token acts as that user. Only send tokens over HTTPS, never put them in a URL, never commit them, and
+delete a token to revoke access. For expiring tokens or refresh flows, look at JWT packages such as
+<strong>djangorestframework-simplejwt</strong> or at <strong>djoser</strong>, which adds registration, activation and password-reset endpoints
+on top of DRF.
+</Aside>
+
+## Built-in permission classes
+
+| Class | Allows |
+| ----- | ------ |
+| `AllowAny` | Everyone |
+| `IsAuthenticated` | Any logged-in user |
+| `IsAuthenticatedOrReadOnly` | Anyone to read, logged-in users to write |
+| `IsAdminUser` | Users with `is_staff=True` |
+| `DjangoModelPermissions` | Users with the model's `add_`, `change_`, `delete_` permissions (the same ones the website uses) |
+| `DjangoModelPermissionsOrAnonReadOnly` | The above, with public read access |
+
+Set a project default in `REST_FRAMEWORK`, then override per view with `permission_classes = [...]`. All the classes in the list must agree.
+
+## A custom permission: owners only
+
+A permission class has two hooks:
+
+- `has_permission(request, view)` runs for every request to the view.
+- `has_object_permission(request, view, obj)` runs when a single object is loaded by `get_object()`.
+
+```python title="books/permissions.py"
+from rest_framework.permissions import SAFE_METHODS, BasePermission
+
+
+class IsOwnerOrReadOnly(BasePermission):
+    """Everyone may read. Only the review's author may change or delete it."""
+
+    message = "You can only change your own reviews."
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in SAFE_METHODS:          # GET, HEAD, OPTIONS
+            return True
+        return obj.user_id == request.user.id
+```
+
+## Review endpoints, custom actions and filtering
+
+```python title="books/api_views.py"
+from django.db.models import Avg, Count
+from rest_framework import viewsets
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import ValidationError
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.permissions import (
+    DjangoModelPermissionsOrAnonReadOnly,
+    IsAuthenticated,
+    IsAuthenticatedOrReadOnly,
+)
+from rest_framework.response import Response
+
+from .models import Author, Book, Review
+from .permissions import IsOwnerOrReadOnly
+from .serializers import AuthorSerializer, BookSerializer, ReviewSerializer
+
+
+@api_view(["GET"])
+def stats(request):
+    return Response({
+        "authors": Author.objects.count(),
+        "books": Book.objects.count(),
+        "reviews": Review.objects.count(),
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_reviews(request):
+    """A user-specific endpoint: the queryset comes from request.user, never from the URL."""
+    reviews = request.user.reviews.select_related("user")
+    return Response(ReviewSerializer(reviews, many=True).data)
+
+
+class BookViewSet(viewsets.ModelViewSet):
+    serializer_class = BookSerializer
+    permission_classes = [DjangoModelPermissionsOrAnonReadOnly]
+    filter_backends = [SearchFilter, OrderingFilter]
+    search_fields = ["title", "author__name"]                  # ?search=gibson
+    ordering_fields = ["title", "published_year", "pages", "average_rating"]   # ?ordering=-pages
+
+    def get_queryset(self):
+        return (
+            Book.objects.select_related("author")
+            .prefetch_related("genres")
+            .annotate(average_rating=Avg("reviews__rating"))
+            .order_by("title")
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(added_by=self.request.user)
+
+    # GET /api/books/<id>/reviews/  (detail=True: acts on one book)
+    @action(detail=True, methods=["get"])
+    def reviews(self, request, pk=None):
+        book = self.get_object()
+        reviews = book.reviews.select_related("user")
+        return Response(ReviewSerializer(reviews, many=True).data)
+
+    # GET /api/books/top_rated/  (detail=False: acts on the collection)
+    @action(detail=False, methods=["get"])
+    def top_rated(self, request):
+        top = self.get_queryset().filter(average_rating__isnull=False).order_by("-average_rating", "title")[:5]
+        return Response(self.get_serializer(top, many=True).data)
+
+
+class AuthorViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = AuthorSerializer
+
+    def get_queryset(self):
+        return Author.objects.annotate(book_count=Count("books")).order_by("name")
+
+
+class ReviewViewSet(viewsets.ModelViewSet):
+    serializer_class = ReviewSerializer
+    # Both must pass: logged in to write, and the owner to change an existing review
+    permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+
+    def get_queryset(self):
+        queryset = Review.objects.select_related("user", "book")
+        book_id = self.request.query_params.get("book")        # ?book=3
+        if book_id:
+            queryset = queryset.filter(book_id=book_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        book = serializer.validated_data["book"]
+        if Review.objects.filter(book=book, user=self.request.user).exists():
+            raise ValidationError({"detail": "You have already reviewed this book."})
+        serializer.save(user=self.request.user)                # the user comes from the token, not the body
+```
+
+```python title="books/api_urls.py"
+from django.urls import include, path
+from rest_framework.authtoken.views import obtain_auth_token
+from rest_framework.routers import DefaultRouter
+
+from . import api_views
+
+app_name = "api"
+
+router = DefaultRouter()
+router.register("books", api_views.BookViewSet, basename="book")
+router.register("authors", api_views.AuthorViewSet, basename="author")
+router.register("reviews", api_views.ReviewViewSet, basename="review")
+
+urlpatterns = [
+    path("stats/", api_views.stats, name="stats"),
+    path("me/reviews/", api_views.my_reviews, name="my_reviews"),
+    path("token/", obtain_auth_token, name="token"),
+    path("", include(router.urls)),
+]
+```
+
+New endpoints:
+
+| URL | Notes |
+| --- | ----- |
+| `POST /api/token/` | Exchange credentials for a token |
+| `GET /api/books/?search=gibson&ordering=-pages` | Search and sort |
+| `GET /api/books/<id>/reviews/` | Custom detail action |
+| `GET /api/books/top_rated/` | Custom collection action |
+| `GET/POST /api/reviews/` and `GET /api/reviews/?book=3` | List (optionally per book) and create |
+| `PUT/PATCH/DELETE /api/reviews/<id>/` | Only the author |
+| `GET /api/me/reviews/` | The caller's own reviews |
+
+Walk through a session from the terminal:
+
+```sh
+# 1. Write without a token: rejected
+curl -i -X POST http://127.0.0.1:8000/api/reviews/ -H "Content-Type: application/json" \
+     -d '{"book": 1, "rating": 5, "text": "Great"}'
+# HTTP/1.1 403 Forbidden
+
+# 2. With a token: created, and "user" is filled in from the token
+curl -X POST http://127.0.0.1:8000/api/reviews/ -H "Content-Type: application/json" \
+     -H "Authorization: Token $TOKEN" -d '{"book": 1, "rating": 5, "text": "Great"}'
+# {"id": 1, "book": 1, "user": "mia", "rating": 5, "text": "Great", "created_at": "..."}
+
+# 3. Someone else tries to delete it: 403 "You can only change your own reviews."
+```
+
+<Aside type="tip" title="Why object permissions need get_object()">
+`has_object_permission` only runs when the view loads an object through `self.get_object()`. Generic viewsets do that automatically for retrieve, update and destroy. If you fetch an object yourself in a custom action, call `self.check_object_permissions(request, obj)`.
+</Aside>
+
+## Security checklist for APIs
+
+- Authenticate every write. Prefer `IsAuthenticatedOrReadOnly` or stricter as the global default.
+- Never trust ids in the body for ownership. Take the user from `request.user`.
+- Return only the fields the client needs. List them explicitly in `Meta.fields` instead of using `"__all__"`.
+- Paginate every list, so one request cannot return a million rows.
+- Throttle abusive clients with `DEFAULT_THROTTLE_CLASSES` and `DEFAULT_THROTTLE_RATES`.
+- Use HTTPS in production, and set `CORS` headers (with the `django-cors-headers` package) only for the origins that need them.
+
+## Check yourself
+
+1. What is the difference between `has_permission` and `has_object_permission`?
+2. A client sends `{"book": 2, "rating": 4, "user": 99}` to `POST /api/reviews/`. Which user is stored and why?
+3. Add a `GET /api/authors/<id>/books/` endpoint. What do you add to `AuthorViewSet`?
+
+<details>
+<summary>Answers</summary>
+
+1. `has_permission` runs on every request and knows nothing about a specific row. `has_object_permission` runs after a single object was loaded and can compare it to the user.
+2. The authenticated caller. `user` is `read_only`, so the value in the body is ignored, and `perform_create` saves `user=self.request.user`.
+3. A detail action that returns the author's books:
+
+```python
+@action(detail=True, methods=["get"])
+def books(self, request, pk=None):
+    author = self.get_object()
+    queryset = author.books.select_related("author").prefetch_related("genres")
+    return Response(BookSerializer(queryset, many=True).data)
+```
+
+</details>

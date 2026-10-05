@@ -1,0 +1,222 @@
+---
+title: "6. Events"
+description: "React to clicks, keys and input with listeners, and use propagation and delegation to scale up."
+difficulty: intermediate
+readingTime: 16
+tags: [javascript, events]
+sidebar:
+  order: 6
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A web page mostly waits. When something happens, such as a click, key press, or scroll, the browser fires an **event**, and
+your code can listen for it. This is **event-driven programming**.
+
+## Adding a listener
+
+```html title="index.html"
+<button id="add-btn">Add task</button>
+<p id="count">Tasks: 0</p>
+```
+
+```js title="main.js"
+const button = document.querySelector('#add-btn');
+const count = document.querySelector('#count');
+let total = 0;
+
+function handleClick() {
+  total++;
+  count.textContent = `Tasks: ${total}`;
+}
+
+button.addEventListener('click', handleClick);   // note: no parentheses on handleClick!
+```
+
+`addEventListener(type, handler)` registers a function to call when the event happens.
+
+<Aside type="caution" title="Pass the function, don't call it">
+`button.addEventListener('click', handleClick())` runs `handleClick` immediately and registers its return value. Pass `handleClick` itself, or wrap it: `() => handleClick()`.
+</Aside>
+
+You can also use an arrow function inline, and remove a listener later with the same function reference:
+
+```js
+button.addEventListener('click', () => console.log('clicked'));
+button.removeEventListener('click', handleClick);
+```
+
+## Common events
+
+| Event | Fires when |
+| ----- | ---------- |
+| `click` | An element is clicked (or activated with the keyboard) |
+| `input` | The value of a field changes (every keystroke) |
+| `change` | A field loses focus after its value changed, or a select/checkbox changes |
+| `submit` | A form is submitted |
+| `keydown` / `keyup` | A key is pressed or released |
+| `mouseover` / `mouseout` | The pointer enters or leaves an element |
+| `focus` / `blur` | A field gains or loses focus |
+| `DOMContentLoaded` | The HTML has been parsed |
+
+## The event object
+
+The browser passes your handler an object describing what happened.
+
+```js
+const search = document.querySelector('#search');
+
+search.addEventListener('input', (event) => {
+  console.log(event.type);              // 'input'
+  console.log(event.target);            // the element that fired it
+  console.log(event.target.value);      // the current text in the field
+});
+
+document.addEventListener('keydown', (event) => {
+  console.log(event.key);               // 'Enter', 'a', 'Escape', ...
+  if (event.key === 'Escape') {
+    search.value = '';
+  }
+});
+```
+
+### preventDefault
+
+Some elements have built-in behaviour: links navigate, forms reload the page. `event.preventDefault()` cancels it.
+
+```js
+document.querySelector('a#docs').addEventListener('click', (event) => {
+  event.preventDefault();               // stay on this page
+  console.log('Link intercepted');
+});
+```
+
+## Propagation: events bubble
+
+An event does not stay on the element where it happened. It starts at the **target**, then **bubbles** up through each
+ancestor to the document.
+
+```html
+<div id="outer">
+  <div id="inner">
+    <button id="btn">Click me</button>
+  </div>
+</div>
+```
+
+```js
+for (const id of ['outer', 'inner', 'btn']) {
+  document.getElementById(id).addEventListener('click', () => console.log(id));
+}
+// Clicking the button prints: btn, inner, outer
+```
+
+- `event.target` is the element that was actually clicked.
+- `event.currentTarget` is the element whose listener is running.
+- `event.stopPropagation()` stops the bubbling. Use it rarely, since it can break other listeners.
+
+## Event delegation
+
+Imagine a list with 500 items that each need a delete button. Adding 500 listeners is wasteful, and it breaks for
+items added later. Instead, listen **once on the parent** and check which child was the target.
+
+```html
+<ul id="task-list">
+  <li data-id="1">Buy milk <button class="delete">x</button></li>
+  <li data-id="2">Walk the dog <button class="delete">x</button></li>
+</ul>
+```
+
+```js
+const list = document.querySelector('#task-list');
+
+list.addEventListener('click', (event) => {
+  const deleteButton = event.target.closest('.delete');   // did the click land on (or inside) a delete button?
+  if (!deleteButton) return;                              // no, ignore it
+
+  const item = deleteButton.closest('li');
+  console.log('Deleting task', item.dataset.id);
+  item.remove();
+});
+
+// Items added later work automatically:
+const newItem = document.createElement('li');
+newItem.dataset.id = '3';
+newItem.innerHTML = 'Water plants <button class="delete">x</button>';
+list.append(newItem);
+```
+
+`closest()` is what makes delegation reliable, because clicks may land on an icon or span inside the button.
+
+## Putting it together: a tiny task list
+
+```html title="index.html"
+<input id="new-task" placeholder="New task" />
+<button id="add">Add</button>
+<ul id="tasks"></ul>
+```
+
+```js title="main.js"
+const input = document.querySelector('#new-task');
+const addButton = document.querySelector('#add');
+const taskList = document.querySelector('#tasks');
+
+function addTask() {
+  const text = input.value.trim();
+  if (!text) return;
+
+  const li = document.createElement('li');
+  const label = document.createElement('span');
+  label.textContent = text;
+  const remove = document.createElement('button');
+  remove.textContent = 'Remove';
+  remove.className = 'remove';
+  li.append(label, remove);
+  taskList.append(li);
+
+  input.value = '';
+  input.focus();
+}
+
+addButton.addEventListener('click', addTask);
+input.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') addTask();
+});
+
+taskList.addEventListener('click', (event) => {
+  if (event.target.matches('.remove')) {
+    event.target.closest('li').remove();
+  } else if (event.target.matches('span')) {
+    event.target.classList.toggle('done');     // click a task to cross it out
+  }
+});
+```
+
+## Check yourself
+
+1. Make a button toggle between "Dark" and "Light" by toggling a class on `document.body`.
+2. Show how many characters are left (out of 100) as the user types in a textarea.
+3. In the nested `div` example, what prints if you click `inner` and the `btn` handler calls `event.stopPropagation()`?
+
+<details>
+<summary>Answers</summary>
+
+```js
+// 1
+const themeButton = document.querySelector('#theme');
+themeButton.addEventListener('click', () => {
+  const dark = document.body.classList.toggle('dark');
+  themeButton.textContent = dark ? 'Light' : 'Dark';
+});
+
+// 2
+const note = document.querySelector('#note');
+const remaining = document.querySelector('#remaining');
+note.addEventListener('input', () => {
+  remaining.textContent = 100 - note.value.length;
+});
+```
+
+3. Clicking `inner` prints `inner` then `outer`. The button's `stopPropagation` only matters when the button itself is clicked, in which case only `btn` prints.
+
+</details>

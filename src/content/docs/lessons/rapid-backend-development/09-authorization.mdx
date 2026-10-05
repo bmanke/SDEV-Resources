@@ -1,0 +1,462 @@
+---
+title: "9. Authorization, Permissions and User-Specific Data"
+description: "Decide what each signed-in user may do: permissions, groups, ownership checks, user-scoped querysets and 403 pages."
+difficulty: intermediate
+readingTime: 17
+tags: [django, authorization, permissions, security]
+sidebar:
+  order: 9
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Being logged in only proves **who** someone is. Book Club needs rules about **what** they may do:
+
+| Who | May |
+| --- | --- |
+| Anyone | Browse books and read reviews |
+| Any member | Write, change and delete **their own** reviews |
+| Librarians | Add, edit and delete books |
+
+There are three layers of authorization in Django, and you will use all of them.
+
+1. **Is the user logged in?** (`@login_required`)
+2. **Does the user have a permission or role?** (permissions and groups)
+3. **Does this user own this particular object?** (ownership checks and scoped querysets)
+
+## Permissions and groups
+
+Every model automatically gets four permissions: `add_book`, `change_book`, `delete_book` and `view_book`. They are checked as `"app_label.codename"`, for example `"books.add_book"`.
+
+A **group** is a named set of permissions. Putting a user in a group gives them all of its permissions, which is how you build roles.
+
+```python
+# python manage.py shell
+from django.contrib.auth.models import Group, Permission, User
+
+librarians, created = Group.objects.get_or_create(name="Librarians")
+perms = Permission.objects.filter(
+    content_type__app_label="books",
+    content_type__model="book",
+    codename__in=["add_book", "change_book", "delete_book"],
+)
+librarians.permissions.set(perms)
+
+sam = User.objects.get(username="sam")
+sam.groups.add(librarians)
+sam.has_perm("books.add_book")       # True (note: re-fetch the user if permissions were cached)
+```
+
+You can also manage groups and permissions in the admin site. In lesson 12 you will turn this setup into a management command so every environment gets the same roles.
+
+Superusers pass every permission check automatically.
+
+## Tracking who added a book
+
+Add an owner field to `Book`. It is nullable so books that already exist stay valid.
+
+```python title="books/models.py"
+from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import models
+
+
+class Author(models.Model):
+    name = models.CharField(max_length=120)
+    born = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Genre(models.Model):
+    name = models.CharField(max_length=60, unique=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Book(models.Model):
+    title = models.CharField(max_length=200)
+    author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name="books")
+    genres = models.ManyToManyField(Genre, related_name="books", blank=True)
+    published_year = models.PositiveSmallIntegerField()
+    pages = models.PositiveIntegerField(default=0)
+    summary = models.TextField(blank=True)
+    added_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,           # keep the book if the librarian's account is removed
+        related_name="added_books",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["title"]
+
+    def __str__(self):
+        return self.title
+
+
+class Review(models.Model):
+    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="reviews")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reviews")
+    rating = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+    )
+    text = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["book", "user"], name="one_review_per_user_per_book"),
+        ]
+
+    def __str__(self):
+        return f"{self.user} rated {self.book} {self.rating}/5"
+```
+
+```sh
+python manage.py makemigrations
+python manage.py migrate
+```
+
+## Permission checks in views
+
+Stack `@login_required` (redirects visitors to the login page) with `@permission_required(..., raise_exception=True)` (answers a logged-in user who lacks the permission with `403 Forbidden`, instead of bouncing them to login in a loop).
+
+```python title="books/views.py"
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required, permission_required
+from django.core.exceptions import PermissionDenied
+from django.db.models import Avg, Count, Q
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
+
+from .forms import BookForm, ReviewForm
+from .models import Book, Review
+
+SORT_OPTIONS = {
+    "title": "title",
+    "newest": "-published_year",
+    "oldest": "published_year",
+    "longest": "-pages",
+}
+
+
+def home(request):
+    return render(request, "books/home.html", {"message": "Welcome to Book Club"})
+
+
+def book_list(request):
+    query = request.GET.get("q", "").strip()
+    sort = request.GET.get("sort", "title")
+
+    books = (
+        Book.objects.select_related("author")
+        .prefetch_related("genres")
+        .annotate(average_rating=Avg("reviews__rating"), review_count=Count("reviews"))
+    )
+    if query:
+        books = books.filter(Q(title__icontains=query) | Q(author__name__icontains=query))
+    books = books.order_by(SORT_OPTIONS.get(sort, "title"))
+
+    context = {"books": books, "query": query, "sort": sort}
+    return render(request, "books/book_list.html", context)
+
+
+def book_detail(request, book_id):
+    book = get_object_or_404(
+        Book.objects.select_related("author").prefetch_related("genres", "reviews__user"),
+        pk=book_id,
+    )
+    context = {"book": book, "average_rating": book.reviews.aggregate(avg=Avg("rating"))["avg"]}
+    return render(request, "books/book_detail.html", context)
+
+
+@login_required
+@permission_required("books.add_book", raise_exception=True)
+def book_create(request):
+    if request.method == "POST":
+        form = BookForm(request.POST)
+        if form.is_valid():
+            book = form.save(commit=False)
+            book.added_by = request.user           # record the owner from the session
+            book.save()
+            form.save_m2m()                        # needed after commit=False to save the genres
+            messages.success(request, f"Added {book.title}.")
+            return redirect("books:book_detail", book_id=book.pk)
+    else:
+        form = BookForm()
+    return render(request, "books/book_form.html", {"form": form, "heading": "Add a book"})
+
+
+@login_required
+@permission_required("books.change_book", raise_exception=True)
+def book_update(request, book_id):
+    book = get_object_or_404(Book, pk=book_id)
+    if request.method == "POST":
+        form = BookForm(request.POST, instance=book)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Updated {book.title}.")
+            return redirect("books:book_detail", book_id=book.pk)
+    else:
+        form = BookForm(instance=book)
+    return render(request, "books/book_form.html", {"form": form, "heading": f"Edit {book.title}"})
+
+
+@login_required
+@permission_required("books.delete_book", raise_exception=True)
+@require_POST
+def book_delete(request, book_id):
+    book = get_object_or_404(Book, pk=book_id)
+    book.delete()
+    messages.success(request, f"Deleted {book.title}.")
+    return redirect("books:book_list")
+
+
+@login_required
+def review_create(request, book_id):
+    book = get_object_or_404(Book, pk=book_id)
+    existing = Review.objects.filter(book=book, user=request.user).first()
+
+    if request.method == "POST":
+        form = ReviewForm(request.POST, instance=existing)
+        if form.is_valid():
+            review = form.save(commit=False)
+            review.book = book
+            review.user = request.user
+            review.save()
+            messages.success(request, "Thanks for your review.")
+            return redirect("books:book_detail", book_id=book.pk)
+    else:
+        form = ReviewForm(instance=existing)
+    return render(request, "books/review_form.html", {"form": form, "book": book})
+
+
+@login_required
+def my_reviews(request):
+    # User-specific data: filter by the logged-in user, never by an id from the URL
+    reviews = request.user.reviews.select_related("book__author")
+    return render(request, "books/my_reviews.html", {"reviews": reviews})
+
+
+@login_required
+@require_POST
+def review_delete(request, review_id):
+    review = get_object_or_404(Review, pk=review_id)
+    if review.user != request.user:                # ownership check
+        raise PermissionDenied                     # produces a 403 response
+    book_id = review.book_id
+    review.delete()
+    messages.success(request, "Your review was deleted.")
+    return redirect("books:book_detail", book_id=book_id)
+```
+
+## Ownership: two ways to protect an object
+
+**1. Check, then refuse (403).** `review_delete` loads the review, compares `review.user` to `request.user`, and raises `PermissionDenied`. The visitor learns the review exists but is not theirs.
+
+**2. Scope the query (404).** Build the queryset from the user, so other people's objects simply cannot be found:
+
+```python
+review = get_object_or_404(Review, pk=review_id, user=request.user)
+```
+
+Option 2 is the safest default: forgetting a check is impossible when the query itself is limited to the user's rows. Use it whenever you do not need a special 403 message.
+
+<Aside type="caution" title="Insecure direct object references">
+If `/reviews/7/delete/` only checked `@login_required`, any member could delete any review by changing the number in the URL. Always ask, "what stops user A from using user B's id here?"
+</Aside>
+
+`my_reviews` shows the idea at its simplest: `request.user.reviews` only ever contains the current user's rows.
+
+```jinja title="books/templates/books/my_reviews.html"
+{% extends "base.html" %}
+
+{% block title %}My reviews | Book Club{% endblock %}
+
+{% block content %}
+  <h1>My reviews</h1>
+  {% for review in reviews %}
+    <article>
+      <a href="{% url 'books:book_detail' review.book.id %}">{{ review.book.title }}</a>
+      by {{ review.book.author.name }}: {{ review.rating }} / 5
+      <p>{{ review.text }}</p>
+      <form method="post" action="{% url 'books:review_delete' review.id %}" class="inline">
+        {% csrf_token %}
+        <button type="submit">Delete</button>
+      </form>
+    </article>
+  {% empty %}
+    <p>You have not reviewed any books yet.</p>
+  {% endfor %}
+{% endblock %}
+```
+
+```python title="books/urls.py"
+from django.urls import path
+
+from . import views
+
+app_name = "books"
+
+urlpatterns = [
+    path("", views.home, name="home"),
+    path("books/", views.book_list, name="book_list"),
+    path("books/new/", views.book_create, name="book_create"),
+    path("books/<int:book_id>/", views.book_detail, name="book_detail"),
+    path("books/<int:book_id>/edit/", views.book_update, name="book_update"),
+    path("books/<int:book_id>/delete/", views.book_delete, name="book_delete"),
+    path("books/<int:book_id>/review/", views.review_create, name="review_create"),
+    path("reviews/mine/", views.my_reviews, name="my_reviews"),
+    path("reviews/<int:review_id>/delete/", views.review_delete, name="review_delete"),
+]
+```
+
+## Permissions in templates
+
+Templates receive a `perms` variable and the `user`. Hide controls the user cannot use. This is a convenience only. The **view** must still enforce the rule, because hiding a button does not stop a hand-written request.
+
+```jinja title="templates/base.html"
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Book Club{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/site.css' %}">
+</head>
+<body>
+  <header>
+    <a class="brand" href="{% url 'books:home' %}">Book Club</a>
+    <nav>
+      <a href="{% url 'books:book_list' %}">Books</a>
+      {% if perms.books.add_book %}
+        <a href="{% url 'books:book_create' %}">Add a book</a>
+      {% endif %}
+      {% if user.is_authenticated %}
+        <a href="{% url 'books:my_reviews' %}">My reviews</a>
+        <span>Hi, {{ user.username }}</span>
+        <form method="post" action="{% url 'logout' %}" class="inline">
+          {% csrf_token %}
+          <button type="submit">Log out</button>
+        </form>
+      {% else %}
+        <a href="{% url 'login' %}">Log in</a>
+        <a href="{% url 'signup' %}">Sign up</a>
+      {% endif %}
+    </nav>
+  </header>
+
+  <main>
+    {% if messages %}
+      <ul class="messages">
+        {% for message in messages %}
+          <li class="{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>Built with Django</footer>
+</body>
+</html>
+```
+
+```jinja title="books/templates/books/book_detail.html"
+{% extends "base.html" %}
+
+{% block title %}{{ book.title }} | Book Club{% endblock %}
+
+{% block content %}
+  <h1>{{ book.title }}</h1>
+  <p>
+    by {{ book.author.name }}, {{ book.published_year }} &middot; {{ book.pages }} pages
+  </p>
+  <p>
+    {% for genre in book.genres.all %}<span class="tag">{{ genre.name }}</span>{% endfor %}
+  </p>
+  {% if book.summary %}<p>{{ book.summary }}</p>{% endif %}
+
+  {% if perms.books.change_book %}
+    <a href="{% url 'books:book_update' book.id %}">Edit</a>
+  {% endif %}
+  {% if perms.books.delete_book %}
+    <form method="post" action="{% url 'books:book_delete' book.id %}" class="inline"
+          onsubmit="return confirm('Delete this book?')">
+      {% csrf_token %}
+      <button type="submit">Delete</button>
+    </form>
+  {% endif %}
+
+  <h2>Reviews{% if average_rating %} ({{ average_rating|floatformat:1 }} / 5){% endif %}</h2>
+  {% for review in book.reviews.all %}
+    <article>
+      <strong>{{ review.user.username }}</strong> gave it {{ review.rating }} / 5
+      <p>{{ review.text }}</p>
+    </article>
+  {% empty %}
+    <p>No reviews yet.</p>
+  {% endfor %}
+
+  {% if user.is_authenticated %}
+    <p><a href="{% url 'books:review_create' book.id %}">Write or update your review</a></p>
+  {% else %}
+    <p><a href="{% url 'login' %}?next={{ request.path }}">Log in</a> to write a review.</p>
+  {% endif %}
+
+  <p><a href="{% url 'books:book_list' %}">&larr; All books</a></p>
+{% endblock %}
+```
+
+## A friendly 403 page
+
+Django looks for `403.html` at the root of your templates folder when `PermissionDenied` is raised:
+
+```jinja title="templates/403.html"
+{% extends "base.html" %}
+
+{% block title %}Not allowed | Book Club{% endblock %}
+
+{% block content %}
+  <h1>You do not have permission to do that</h1>
+  <p>If you think this is a mistake, ask a librarian for access.</p>
+  <p><a href="{% url 'books:home' %}">Back to the home page</a></p>
+{% endblock %}
+```
+
+## Status codes to remember
+
+| Code | Meaning | Typical cause |
+| ---- | ------- | ------------- |
+| `302` | Redirect | Anonymous user sent to the login page |
+| `403` | Forbidden | Logged in but not allowed |
+| `404` | Not found | Missing object, or a scoped query that hid it |
+
+## Check yourself
+
+1. A member opens `/books/new/`. They are logged in but not a librarian. What response do they get, and why not a redirect to login?
+2. Why call `form.save_m2m()` after `form.save(commit=False)`?
+3. Rewrite `review_delete` so that other people's reviews return `404` instead of `403`.
+
+<details>
+<summary>Answers</summary>
+
+1. `403 Forbidden`, because `raise_exception=True` is set. Redirecting a logged-in user to the login page would confuse them. They are already logged in and just lack the permission.
+2. `commit=False` skips the database write, so the many-to-many links (genres) cannot be saved yet. After you call `book.save()`, `form.save_m2m()` stores them.
+3. `review = get_object_or_404(Review, pk=review_id, user=request.user)`, then delete it. The manual comparison and `PermissionDenied` are no longer needed.
+
+</details>

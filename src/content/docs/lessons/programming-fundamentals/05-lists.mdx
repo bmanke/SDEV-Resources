@@ -1,0 +1,173 @@
+---
+title: "5. Lists"
+description: "Store collections of values, access them by position, and process them with methods and loops."
+difficulty: beginner
+readingTime: 14
+tags: [python, lists]
+sidebar:
+  order: 5
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A **list** holds an ordered collection of values. Lists can grow and shrink, and they can hold any mix of types
+(though most lists hold one kind of thing).
+
+## Creating and reading
+
+```python
+songs = ["Africa", "Mr. Brightside", "Dreams"]
+scores = [88, 92, 79, 65]
+empty = []
+
+print(songs[0])        # Africa. Positions start at 0.
+print(songs[-1])       # Dreams. Negative numbers count from the end.
+print(len(songs))      # 3
+print("Dreams" in songs)   # True
+```
+
+Going outside the list raises an `IndexError`: `songs[3]` fails because the valid positions are 0, 1 and 2.
+
+## Slicing
+
+`list[start:stop]` returns a new list from `start` up to, but not including, `stop`. Either end can be left off.
+
+```python
+nums = [10, 20, 30, 40, 50]
+
+print(nums[1:4])    # [20, 30, 40]
+print(nums[:2])     # [10, 20]
+print(nums[3:])     # [40, 50]
+print(nums[::2])    # [10, 30, 50]  every second item
+print(nums[::-1])   # [50, 40, 30, 20, 10]  reversed copy
+```
+
+## Changing a list
+
+Lists are **mutable**, which means you can change them in place.
+
+| Task | Code |
+| ---- | ---- |
+| Replace an item | `songs[0] = "Roar"` |
+| Add to the end | `songs.append("Hello")` |
+| Insert at a position | `songs.insert(1, "Believer")` |
+| Remove by value | `songs.remove("Dreams")` |
+| Remove by position (and get it back) | `last = songs.pop()` or `songs.pop(0)` |
+| Remove everything | `songs.clear()` |
+| Join two lists | `all_songs = songs + more_songs` or `songs.extend(more_songs)` |
+
+```python
+shopping = ["milk", "eggs"]
+shopping.append("bread")
+shopping.insert(0, "coffee")
+shopping.remove("eggs")
+print(shopping)     # ['coffee', 'milk', 'bread']
+```
+
+<Aside type="caution" title="remove only deletes the first match, and it can fail">
+`remove` raises a `ValueError` if the value is not in the list. Check with `in` first when you are not sure.
+</Aside>
+
+## Sorting and summarizing
+
+```python
+scores = [88, 92, 79, 65]
+
+print(sorted(scores))                 # [65, 79, 88, 92]  new list, original untouched
+scores.sort(reverse=True)             # sorts the original in place, biggest first
+print(scores)                         # [92, 88, 79, 65]
+
+print(min(scores), max(scores), sum(scores))
+print(sum(scores) / len(scores))      # average
+```
+
+## Looping over a list
+
+```python
+songs = ["Africa", "Mr. Brightside", "Dreams"]
+
+for song in songs:                     # when you only need the items
+    print(song)
+
+for position, song in enumerate(songs, start=1):   # when you also need a counter
+    print(f"{position}. {song}")
+```
+
+Do not add or remove items from a list while you loop over that same list. Loop over a copy (`for x in items[:]`) or build a new list.
+
+## Building a new list
+
+```python
+prices = [4.5, 12.0, 7.25, 30.0]
+
+expensive = []
+for price in prices:
+    if price > 10:
+        expensive.append(price)
+print(expensive)                       # [12.0, 30.0]
+
+# The same thing as a list comprehension: [what to keep  for item in list  if condition]
+expensive = [price for price in prices if price > 10]
+doubled = [price * 2 for price in prices]
+```
+
+## Copies are not what they seem
+
+```python
+a = [1, 2, 3]
+b = a            # b is another NAME for the same list
+b.append(4)
+print(a)         # [1, 2, 3, 4]  a changed too!
+
+c = a.copy()     # a real, separate copy (same as a[:])
+c.append(5)
+print(a)         # [1, 2, 3, 4]  unchanged
+```
+
+## Example: top three scores
+
+```python title="top_scores.py"
+scores = []
+while True:
+    text = input("Score (or 'done'): ")
+    if text == "done":
+        break
+    scores.append(int(text))
+
+scores.sort(reverse=True)
+top_three = scores[:3]            # slicing never fails, even if there are fewer than 3
+
+for rank, score in enumerate(top_three, start=1):
+    print(f"#{rank}: {score}")
+```
+
+## Check yourself
+
+1. Given `names = ["Mia", "Noor", "Eli", "Zoe"]`, print them in alphabetical order, numbered from 1.
+2. Remove duplicates from `[3, 1, 3, 2, 1]` while keeping the first appearance of each value.
+3. Ask for 5 numbers and print only the ones greater than their average.
+
+<details>
+<summary>Solutions</summary>
+
+```python
+# 1
+names = ["Mia", "Noor", "Eli", "Zoe"]
+for i, name in enumerate(sorted(names), start=1):
+    print(f"{i}. {name}")
+
+# 2
+values = [3, 1, 3, 2, 1]
+unique = []
+for v in values:
+    if v not in unique:
+        unique.append(v)
+print(unique)        # [3, 1, 2]
+
+# 3
+numbers = [float(input(f"Number {i}: ")) for i in range(1, 6)]
+average = sum(numbers) / len(numbers)
+print([n for n in numbers if n > average])
+```
+
+</details>

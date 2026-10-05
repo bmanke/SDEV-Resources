@@ -1,0 +1,312 @@
+---
+title: "6. Relationships Between Models"
+description: "Model one-to-many, many-to-many and one-to-one relationships, query across them and avoid the N+1 query problem."
+difficulty: intermediate
+readingTime: 17
+tags: [django, orm, relationships]
+sidebar:
+  order: 6
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Real data is connected: a book has one author, many genres and many reviews. Relational databases store those links with
+**foreign keys**, and Django gives you three field types to express them.
+
+| Relationship | Field | Example |
+| ------------ | ----- | ------- |
+| One to many | `ForeignKey` | An author has many books; each book has one author |
+| Many to many | `ManyToManyField` | A book has many genres; a genre has many books |
+| One to one | `OneToOneField` | A user has exactly one profile |
+
+## The complete models
+
+Add a `Genre` and a `Review` to `books/models.py`. A review belongs to one book and one user.
+
+```python title="books/models.py"
+from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import models
+
+
+class Author(models.Model):
+    name = models.CharField(max_length=120)
+    born = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Genre(models.Model):
+    name = models.CharField(max_length=60, unique=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Book(models.Model):
+    title = models.CharField(max_length=200)
+    author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name="books")
+    genres = models.ManyToManyField(Genre, related_name="books", blank=True)
+    published_year = models.PositiveSmallIntegerField()
+    pages = models.PositiveIntegerField(default=0)
+    summary = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["title"]
+
+    def __str__(self):
+        return self.title
+
+
+class Review(models.Model):
+    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="reviews")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reviews")
+    rating = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+    )
+    text = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            # One review per user per book, enforced by the database itself
+            models.UniqueConstraint(fields=["book", "user"], name="one_review_per_user_per_book"),
+        ]
+
+    def __str__(self):
+        return f"{self.user} rated {self.book} {self.rating}/5"
+```
+
+```sh
+python manage.py makemigrations
+python manage.py migrate
+```
+
+Why `settings.AUTH_USER_MODEL` and not `User`? It points at whichever user model the project uses, which makes the app reusable and safe if you later switch to a custom user model (lesson 8).
+
+## ForeignKey options
+
+```python
+author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name="books")
+```
+
+`on_delete` says what happens to a book when its author is deleted:
+
+| Value | Behaviour |
+| ----- | --------- |
+| `CASCADE` | Delete the books too |
+| `PROTECT` | Refuse to delete the author while books exist |
+| `SET_NULL` | Set the book's author to `NULL` (needs `null=True`) |
+| `SET_DEFAULT` | Use the field's default |
+
+`related_name` is the name of the **reverse** link, that is `author.books`. Without it Django invents `author.book_set`.
+
+## Using relationships
+
+```python
+from books.models import Author, Book, Genre, Review
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+mia = User.objects.create_user("mia", password="secret-pass-123")
+
+dune = Book.objects.get(title="Dune")
+herbert = dune.author                    # forward: a single Author object
+herbert.books.all()                      # reverse: all of the author's books
+
+scifi, classic = Genre.objects.create(name="Science Fiction"), Genre.objects.create(name="Classic")
+dune.genres.add(scifi)                   # many-to-many: add, remove, set, clear
+dune.genres.all()
+scifi.books.all()                        # reverse side
+
+Review.objects.create(book=dune, user=mia, rating=5, text="A masterpiece.")
+dune.reviews.count()
+mia.reviews.all()
+```
+
+Query **across** relationships with double underscores, in either direction:
+
+```python
+Book.objects.filter(genres__name="Science Fiction")
+Book.objects.filter(reviews__rating__gte=4).distinct()   # distinct: a book with 2 good reviews appears once
+Author.objects.filter(books__pages__gt=400)
+Genre.objects.filter(books__author__name="Frank Herbert")
+```
+
+Aggregate across them:
+
+```python
+from django.db.models import Avg, Count
+
+books = Book.objects.annotate(
+    review_count=Count("reviews"),
+    average_rating=Avg("reviews__rating"),
+).order_by("-average_rating")
+```
+
+## The N+1 query problem
+
+Suppose a template loops over 50 books and prints `{{ book.author.name }}`. Without help Django runs **1 query** for the books and then **50 more**, one per author. That is the N+1 problem, and it is the number one reason Django pages are slow.
+
+```python
+# Slow: 1 + N queries
+for book in Book.objects.all():
+    print(book.author.name)
+
+# Fast: 1 query with a JOIN, for ForeignKey and OneToOne
+for book in Book.objects.select_related("author"):
+    print(book.author.name)
+
+# Fast: 2 queries, for ManyToMany and reverse relations
+for book in Book.objects.prefetch_related("genres", "reviews"):
+    print([g.name for g in book.genres.all()])
+```
+
+| Tool | Use for | How |
+| ---- | ------- | --- |
+| `select_related` | `ForeignKey`, `OneToOneField` (single objects) | SQL JOIN |
+| `prefetch_related` | `ManyToManyField`, reverse `ForeignKey` (many objects) | A second query, joined in Python |
+
+You can count queries while testing with `assertNumQueries` (lesson 15).
+
+## Showing reviews on the detail page
+
+```python title="books/views.py"
+from django.db.models import Avg, Count, Q
+from django.shortcuts import get_object_or_404, render
+
+from .models import Book
+
+SORT_OPTIONS = {
+    "title": "title",
+    "newest": "-published_year",
+    "oldest": "published_year",
+    "longest": "-pages",
+}
+
+
+def home(request):
+    return render(request, "books/home.html", {"message": "Welcome to Book Club"})
+
+
+def book_list(request):
+    query = request.GET.get("q", "").strip()
+    sort = request.GET.get("sort", "title")
+
+    books = (
+        Book.objects.select_related("author")
+        .prefetch_related("genres")
+        .annotate(average_rating=Avg("reviews__rating"), review_count=Count("reviews"))
+    )
+    if query:
+        books = books.filter(Q(title__icontains=query) | Q(author__name__icontains=query))
+    books = books.order_by(SORT_OPTIONS.get(sort, "title"))
+
+    context = {"books": books, "query": query, "sort": sort}
+    return render(request, "books/book_list.html", context)
+
+
+def book_detail(request, book_id):
+    book = get_object_or_404(
+        Book.objects.select_related("author").prefetch_related("genres", "reviews__user"),
+        pk=book_id,
+    )
+    context = {"book": book, "average_rating": book.reviews.aggregate(avg=Avg("rating"))["avg"]}
+    return render(request, "books/book_detail.html", context)
+```
+
+```jinja title="books/templates/books/book_detail.html"
+{% extends "base.html" %}
+
+{% block title %}{{ book.title }} | Book Club{% endblock %}
+
+{% block content %}
+  <h1>{{ book.title }}</h1>
+  <p>
+    by {{ book.author.name }}, {{ book.published_year }} &middot; {{ book.pages }} pages
+  </p>
+  <p>
+    {% for genre in book.genres.all %}<span class="tag">{{ genre.name }}</span>{% endfor %}
+  </p>
+  {% if book.summary %}<p>{{ book.summary }}</p>{% endif %}
+
+  <h2>Reviews{% if average_rating %} ({{ average_rating|floatformat:1 }} / 5){% endif %}</h2>
+  {% for review in book.reviews.all %}
+    <article>
+      <strong>{{ review.user.username }}</strong> gave it {{ review.rating }} / 5
+      <p>{{ review.text }}</p>
+    </article>
+  {% empty %}
+    <p>No reviews yet.</p>
+  {% endfor %}
+
+  <p><a href="{% url 'books:book_list' %}">&larr; All books</a></p>
+{% endblock %}
+```
+
+```jinja title="books/templates/books/book_list.html"
+{% extends "base.html" %}
+
+{% block title %}Books | Book Club{% endblock %}
+
+{% block content %}
+  <h1>Books</h1>
+
+  <form method="get">
+    <input type="search" name="q" value="{{ query }}" placeholder="Search titles or authors">
+    <select name="sort">
+      <option value="title" {% if sort == "title" %}selected{% endif %}>Title</option>
+      <option value="newest" {% if sort == "newest" %}selected{% endif %}>Newest</option>
+      <option value="oldest" {% if sort == "oldest" %}selected{% endif %}>Oldest</option>
+      <option value="longest" {% if sort == "longest" %}selected{% endif %}>Longest</option>
+    </select>
+    <button type="submit">Search</button>
+  </form>
+
+  <p>{{ books|length }} book{{ books|length|pluralize }} found.</p>
+
+  <ul>
+    {% for book in books %}
+      <li>
+        <a href="{% url 'books:book_detail' book.id %}">{{ book.title }}</a>
+        by {{ book.author.name }} ({{ book.published_year }})
+        {% if book.review_count %}&middot; {{ book.average_rating|floatformat:1 }} / 5 from {{ book.review_count }} review{{ book.review_count|pluralize }}{% endif %}
+      </li>
+    {% empty %}
+      <li>No books found.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}
+```
+
+<Aside type="caution" title="Many-to-many needs a saved object">
+You can only call `book.genres.add(...)` after the book has been saved and has a primary key. Save the book first.
+</Aside>
+
+## Check yourself
+
+1. List the titles of every book in the "Science Fiction" genre, newest first.
+2. Which `on_delete` would you pick for `Review.user` if you wanted reviews to survive an account deletion? What else must change on the field?
+3. A page shows 30 books with their genres and takes 31 queries. Which tool fixes it, and what is the new query count?
+
+<details>
+<summary>Answers</summary>
+
+```python
+# 1
+Book.objects.filter(genres__name="Science Fiction").order_by("-published_year").values_list("title", flat=True)
+```
+
+2. `on_delete=models.SET_NULL` together with `null=True` (and usually `blank=True`), so the user column may hold `NULL`.
+3. `prefetch_related("genres")`, which runs one extra query: 2 queries in total (plus any others the page already had).
+
+</details>

@@ -1,0 +1,204 @@
+---
+title: "4. Loops: while and for"
+description: "Repeat work with while and for loops, validate input, and control loops with break and continue."
+difficulty: beginner
+readingTime: 12
+tags: [python, loops]
+sidebar:
+  order: 4
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A loop repeats a block of code. Use a `while` loop when you do not know in advance how many times you need to repeat,
+and a `for` loop when you are walking through a known sequence.
+
+## while: repeat as long as a condition is true
+
+```python
+count = 1
+while count <= 3:
+    print("Round", count)
+    count += 1          # without this line the loop would never end
+print("Done")
+```
+
+A `while` loop has three parts: a starting value, a condition, and something inside the loop that **changes** the condition.
+
+<Aside type="caution" title="Infinite loops">
+If the condition can never become false, the program runs forever. Press <kbd>Ctrl</kbd> + <kbd>C</kbd> in the terminal to stop it.
+</Aside>
+
+### Validating input
+
+Loops are the standard way to keep asking until the user gives a good answer.
+
+```python title="valid_age.py"
+age = int(input("Age (0-120): "))
+while age < 0 or age > 120:
+    print("That's not a valid age.")
+    age = int(input("Age (0-120): "))
+
+print(f"Thanks, you are {age}.")
+```
+
+### A loop that ends on a signal
+
+`while True` plus `break` is a clear way to write "keep going until the user says stop".
+
+```python title="running_total.py"
+total = 0
+while True:
+    text = input("Enter a number (or 'done'): ")
+    if text == "done":
+        break                       # leave the loop immediately
+    total += float(text)
+
+print(f"Total: {total}")
+```
+
+`continue` skips the rest of the current round and starts the next one:
+
+```python
+while True:
+    text = input("Number (or 'done'): ")
+    if text == "done":
+        break
+    if not text.replace(".", "", 1).isdigit():
+        print("Please type a number.")
+        continue                    # go back to the top
+    print(float(text) * 2)
+```
+
+## for and range
+
+A `for` loop takes each item of a sequence in turn. `range` produces a sequence of numbers.
+
+| Call | Produces |
+| ---- | -------- |
+| `range(5)` | `0, 1, 2, 3, 4` |
+| `range(2, 6)` | `2, 3, 4, 5` |
+| `range(0, 10, 3)` | `0, 3, 6, 9` |
+| `range(5, 0, -1)` | `5, 4, 3, 2, 1` |
+
+The stop value is **never included**.
+
+```python
+for i in range(1, 6):
+    print(i, "squared is", i ** 2)
+
+for letter in "hello":       # strings are sequences too
+    print(letter)
+```
+
+## The accumulator pattern
+
+Start with a neutral value, then update it each time through the loop.
+
+```python title="sum_of_squares.py"
+n = int(input("Sum the squares up to: "))
+
+total = 0
+for number in range(1, n + 1):      # + 1 because range stops before the end
+    total += number ** 2
+
+print(f"The sum of squares from 1 to {n} is {total}")
+```
+
+Counting works the same way:
+
+```python
+text = input("Type a sentence: ").lower()
+vowels = 0
+for char in text:
+    if char in "aeiou":
+        vowels += 1
+print("Vowels:", vowels)
+```
+
+## Nested loops
+
+An inner loop runs completely for every step of the outer loop.
+
+```python
+for row in range(1, 4):
+    for col in range(1, 4):
+        print(row * col, end="\t")   # end="\t" stays on the same line
+    print()                          # newline after each row
+```
+
+```text
+1	2	3
+2	4	6
+3	6	9
+```
+
+## A complete example: guessing game
+
+```python title="guessing_game.py"
+import random
+
+secret = random.randint(1, 20)
+attempts = 0
+
+while True:
+    guess = int(input("Guess 1-20: "))
+    attempts += 1
+
+    if guess < secret:
+        print("Too low")
+    elif guess > secret:
+        print("Too high")
+    else:
+        print(f"Got it in {attempts} tries!")
+        break
+```
+
+## Which loop?
+
+- Looping over a list, string or `range`: use **for**.
+- Repeating until something happens (valid input, game over): use **while**.
+
+## Check yourself
+
+1. Print a countdown from 10 to 1, then "Liftoff!".
+2. Ask for numbers until the user types `done`, then print the average.
+3. Print FizzBuzz for 1 to 30: multiples of 3 print `Fizz`, multiples of 5 print `Buzz`, multiples of both print `FizzBuzz`, otherwise the number.
+
+<details>
+<summary>Solutions</summary>
+
+```python
+# 1
+for n in range(10, 0, -1):
+    print(n)
+print("Liftoff!")
+
+# 2
+total = 0
+count = 0
+while True:
+    text = input("Number (or 'done'): ")
+    if text == "done":
+        break
+    total += float(text)
+    count += 1
+
+if count > 0:
+    print(f"Average: {total / count:.2f}")
+else:
+    print("No numbers entered")
+
+# 3
+for n in range(1, 31):
+    if n % 15 == 0:            # check the combined case first
+        print("FizzBuzz")
+    elif n % 3 == 0:
+        print("Fizz")
+    elif n % 5 == 0:
+        print("Buzz")
+    else:
+        print(n)
+```
+
+</details>

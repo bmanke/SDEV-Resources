@@ -1,0 +1,46 @@
+---
+version: 2.4.0
+date: 2026-10-05
+summary: Renamed two Second Semester courses and added 16 original Guided Lessons for Rapid Backend Development.
+type: minor
+---
+
+## Renamed
+
+- "SDEV-2401 Rapid Backend Development" is now **Rapid Backend Development** in the sidebar.
+- "SDEV-2150 Intermediate Frontend" is now **Intermediate Frontend Development** in the sidebar.
+- Updated the notes in the import scripts to use the new names.
+
+## Added: Rapid Backend Development Guided Lessons
+
+Sixteen original Django lessons that build one running project, Book Club, from first page to a deployed API. Each lesson explains the idea in new wording, shows commented code, lists common mistakes and ends with a "Check yourself" exercise with answers.
+
+1. Django Foundations
+2. URLs and Views
+3. Templates
+4. Models, Migrations and the Admin
+5. Querying with the ORM
+6. Relationships Between Models
+7. Forms, Validation and Sanitization
+8. Authentication
+9. Authorization, Permissions and User-Specific Data
+10. Static Files, Media and File Uploads
+11. Class-Based Views and Mixins
+12. Custom Management Commands
+13. Building a REST API with Django REST Framework
+14. API Authentication, Permissions and Custom Actions
+15. Testing Django Applications
+16. Deploying to the Cloud
+
+Also added an overview page with a lesson table, difficulty levels and reading times.
+
+## Verified
+
+- The finished project was built lesson by lesson with Django 5.2 and Django REST Framework, and the migrations, pages, forms, permissions, uploads, commands and API endpoints were exercised.
+- The test suite in lesson 15 (36 tests) passes against that project.
+- The production settings and build script from lesson 16 were run with Gunicorn, WhiteNoise and an HTTPS redirect.
+
+## Layout
+
+- Rapid Backend Development now shows the Guided Lessons first, followed by a collapsed **Original Notes** group that holds the imported SDEV-2401 notes. Nothing was removed.
+- Intermediate Frontend Development keeps its Exercises. Guided Lessons for it have not been written yet.

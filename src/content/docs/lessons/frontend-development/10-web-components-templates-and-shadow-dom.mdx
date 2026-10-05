@@ -1,0 +1,270 @@
+---
+title: "10. Web Components: Templates and Shadow DOM"
+description: "Build your own HTML elements with custom elements, templates, shadow DOM, slots and scoped styles."
+difficulty: advanced
+readingTime: 18
+tags: [javascript, web-components, shadow-dom]
+sidebar:
+  order: 10
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+So far every page was built from HTML elements that the browser already knows: `button`, `ul`, `input`. **Web
+components** let you define your own, such as `<user-card>`, with their own markup, styles and behaviour, and then use them
+anywhere. They are built into the browser, so they need no framework.
+
+Web components combine three standards:
+
+| Standard | Purpose |
+| -------- | ------- |
+| **Custom elements** | Register a new tag name and attach a JavaScript class to it |
+| **Shadow DOM** | Give the element private markup and styles that do not leak in or out |
+| **Templates and slots** | Reusable chunks of HTML, with places for the page to insert content |
+
+## Your first custom element
+
+```js title="src/components/hello-badge.js"
+class HelloBadge extends HTMLElement {
+  constructor() {
+    super();                                  // always call super() first
+  }
+
+  connectedCallback() {
+    // Runs when the element is added to the page
+    this.textContent = 'Hello from my own element!';
+  }
+}
+
+customElements.define('hello-badge', HelloBadge);    // register the tag
+```
+
+```html title="index.html"
+<hello-badge></hello-badge>
+<script type="module" src="/src/components/hello-badge.js"></script>
+```
+
+Rules for the tag name:
+
+- It must contain a **hyphen** (`hello-badge`, not `hellobadge`), so it never clashes with a future HTML element.
+- It must be lowercase and registered once.
+- Custom elements are not self-closing: write `<hello-badge></hello-badge>`.
+
+## Shadow DOM: private markup and styles
+
+`attachShadow` gives the element a hidden subtree. Styles inside apply only inside, and styles from the page do not reach in.
+
+```js title="src/components/user-card.js (first version)"
+class UserCard extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });      // 'open' lets outside code reach element.shadowRoot
+  }
+
+  connectedCallback() {
+    this.shadowRoot.innerHTML = `
+      <style>
+        .card {
+          border: 1px solid #ccc;
+          border-radius: 8px;
+          padding: 1rem;
+          max-width: 18rem;
+          font-family: sans-serif;
+        }
+        h2 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+      </style>
+
+      <div class="card">
+        <h2>Zelda</h2>
+        <p>Princess of Hyrule</p>
+      </div>
+    `;
+  }
+}
+
+customElements.define('user-card', UserCard);
+```
+
+The page's own `h2 { color: red }` rule will **not** change this card, and the card's `h2` rule will not change the page.
+Inspect it in DevTools and you will see a `#shadow-root` node.
+
+## Templates
+
+Writing HTML inside a JavaScript string works, but the `<template>` element is better: the browser parses it once, and
+you clone it for each instance.
+
+```html title="index.html"
+<template id="user-card-template">
+  <style>
+    .card { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; }
+    h2 { margin: 0; }
+  </style>
+  <div class="card">
+    <h2><slot name="name">Unknown user</slot></h2>
+    <p><slot name="role">No role</slot></p>
+    <slot></slot>
+  </div>
+</template>
+```
+
+```js
+class UserCard extends HTMLElement {
+  constructor() {
+    super();
+    const template = document.querySelector('#user-card-template');
+    this.attachShadow({ mode: 'open' }).append(template.content.cloneNode(true));
+  }
+}
+customElements.define('user-card', UserCard);
+```
+
+`template.content` is a document fragment. Always **clone** it (`cloneNode(true)`) so each element gets its own copy.
+
+If you ship the component as a separate file, create the template in JavaScript instead:
+
+```js
+const template = document.createElement('template');
+template.innerHTML = `<style>/* ... */</style><div class="card"><slot></slot></div>`;
+```
+
+## Slots: content from the page
+
+A `<slot>` is a hole in the component's shadow DOM. Whatever you put between the custom element's tags is shown there.
+
+```html
+<user-card>
+  <span slot="name">Zelda</span>      <!-- fills the slot named "name" -->
+  <span slot="role">Princess</span>
+  <p>Loves puzzles and the Triforce.</p>   <!-- no slot attribute: goes to the default slot -->
+</user-card>
+
+<user-card>
+  <span slot="name">Link</span>
+</user-card>
+```
+
+- Named slots receive children whose `slot` attribute matches.
+- The unnamed `<slot>` takes everything else.
+- Text inside a slot tag (`Unknown user`) is **fallback content**, shown only when nothing is provided.
+- Slotted content stays in the **light DOM**, so the page can still style it and select it normally.
+
+## Styling a component
+
+Shadow DOM isolates styles, but there are deliberate ways to configure them.
+
+```css
+/* Inside the component's <style> */
+
+:host {
+  display: block;                    /* custom elements are inline by default */
+  margin-block: 1rem;
+}
+
+:host([featured]) .card {            /* when the host has the attribute featured */
+  border-color: gold;
+}
+
+::slotted(span) {                    /* style slotted light-DOM elements, one level deep */
+  font-weight: bold;
+}
+
+.card {
+  background: var(--card-bg, white); /* a CSS variable the page can override */
+  color: var(--card-fg, black);
+}
+```
+
+| Tool | Does |
+| ---- | ---- |
+| `:host` | Styles the custom element itself, from the inside |
+| `:host([attr])` | Styles it based on an attribute |
+| `::slotted(selector)` | Styles slotted content |
+| CSS custom properties | **Pass through** the boundary, making them the best theming tool |
+| `::part(name)` | Lets the page style an element you mark with `part="name"` |
+
+```css
+/* In the page's own stylesheet */
+user-card {
+  --card-bg: #f0f4ff;
+}
+user-card::part(title) {
+  text-transform: uppercase;
+}
+```
+
+<Aside type="tip" title="Theming recipe">
+Use CSS variables for colours and spacing, `::part` for specific elements you want to expose, and keep everything else private.
+</Aside>
+
+## Putting it together
+
+```js title="src/components/user-card.js"
+const template = document.createElement('template');
+template.innerHTML = `
+  <style>
+    :host { display: block; margin-block: 1rem; }
+    .card {
+      border: 1px solid var(--card-border, #ccc);
+      border-radius: 8px;
+      padding: 1rem;
+      background: var(--card-bg, white);
+      max-width: 20rem;
+    }
+    h2 { margin: 0; font-size: 1.1rem; }
+    ::slotted([slot="role"]) { color: #555; }
+  </style>
+  <div class="card">
+    <h2 part="title"><slot name="name">Unknown user</slot></h2>
+    <p><slot name="role"></slot></p>
+    <slot></slot>
+  </div>
+`;
+
+class UserCard extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' }).append(template.content.cloneNode(true));
+  }
+}
+
+customElements.define('user-card', UserCard);
+```
+
+## Check yourself
+
+1. What does the hyphen requirement protect against?
+2. Create `<info-box>` with a default slot and a `title` slot, a yellow border, and a fallback title of "Note".
+3. Why does the page's `p { color: red }` rule not change the paragraph inside `<user-card>`'s shadow DOM?
+
+<details>
+<summary>Answers</summary>
+
+1. Name clashes with built-in HTML elements, current and future. The standard guarantees no built-in tag will contain a hyphen.
+
+```js
+// 2
+const infoTemplate = document.createElement('template');
+infoTemplate.innerHTML = `
+  <style>
+    :host { display: block; }
+    .box { border: 2px solid gold; padding: 0.75rem; border-radius: 6px; }
+    strong { display: block; margin-bottom: 0.25rem; }
+  </style>
+  <div class="box">
+    <strong><slot name="title">Note</slot></strong>
+    <slot></slot>
+  </div>
+`;
+
+class InfoBox extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' }).append(infoTemplate.content.cloneNode(true));
+  }
+}
+customElements.define('info-box', InfoBox);
+```
+
+3. Shadow DOM encapsulation. Outside selectors do not cross the shadow boundary, so only the component's own styles (and inherited properties like `color` set on the host) apply.
+
+</details>

@@ -1,0 +1,215 @@
+---
+title: "5. The DOM: Selecting and Changing the Page"
+description: "Find elements, change their content and styles, create new elements, and use timers."
+difficulty: intermediate
+readingTime: 16
+tags: [javascript, dom]
+sidebar:
+  order: 5
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+When a browser loads HTML it builds a tree of objects called the **DOM** (Document Object Model). JavaScript can read
+and change that tree, and the page updates to match. Every interactive website depends on this.
+
+```html title="index.html"
+<body>
+  <h1 id="title">My Tasks</h1>
+  <ul id="task-list">
+    <li class="task">Buy milk</li>
+    <li class="task done">Walk the dog</li>
+    <li class="task">Read chapter 5</li>
+  </ul>
+  <script type="module" src="/src/main.js"></script>
+</body>
+```
+
+The tree looks like this: `document` contains `html`, which contains `body`, which contains `h1` and `ul`, and so on. Each node is a **parent**, **child** or **sibling** of others.
+
+## Selecting elements
+
+`querySelector` takes any CSS selector and returns the **first** match (or `null`). `querySelectorAll` returns **all** matches.
+
+```js
+const title = document.querySelector('#title');           // by id
+const firstTask = document.querySelector('.task');        // first element with the class
+const allTasks = document.querySelectorAll('.task');      // a NodeList of all three
+const doneTask = document.querySelector('li.done');       // any CSS selector works
+
+console.log(title.textContent);     // My Tasks
+console.log(allTasks.length);       // 3
+
+for (const task of allTasks) {      // NodeLists are iterable
+  console.log(task.textContent);
+}
+
+const missing = document.querySelector('#nope');
+console.log(missing);               // null, so check before using it
+```
+
+<Aside type="caution" title="Script runs before the element exists?">
+If your script runs before the HTML it needs, selectors return `null`. A `type="module"` script at the end of `<body>` (as above) is deferred automatically, so the page is ready.
+</Aside>
+
+## Changing content
+
+| Property | Use it for |
+| -------- | ---------- |
+| `textContent` | Plain text. Safe: tags are shown as text, not interpreted. |
+| `innerHTML` | Parsing a string as HTML. **Never** put untrusted input in it. |
+| `value` | The current value of an `input`, `select` or `textarea`. |
+
+```js
+title.textContent = 'Today\'s Tasks';
+firstTask.textContent = 'Buy oat milk';
+```
+
+<Aside type="caution" title="innerHTML and user input">
+If a user types `<img src=x onerror=alert(1)>` and you assign it with `innerHTML`, their code runs on your page. This is called cross-site scripting (XSS). Use `textContent` for user text.
+</Aside>
+
+## Classes, attributes and styles
+
+```js
+firstTask.classList.add('important');
+firstTask.classList.remove('important');
+firstTask.classList.toggle('done');               // add if missing, remove if present
+console.log(firstTask.classList.contains('done'));
+
+const link = document.createElement('a');
+link.setAttribute('href', 'https://example.com');
+console.log(link.getAttribute('href'));
+link.hidden = true;                                // many attributes are properties too
+
+firstTask.dataset.id = '42';                       // writes data-id="42"
+console.log(firstTask.dataset.id);
+
+firstTask.style.color = 'tomato';                  // inline style (camelCase names)
+```
+
+Prefer toggling CSS **classes** to setting styles in JavaScript. It keeps design in your stylesheet.
+
+## Creating and removing elements
+
+```js
+const list = document.querySelector('#task-list');
+
+const item = document.createElement('li');        // 1. create
+item.className = 'task';
+item.textContent = 'Water the plants';            // 2. configure
+list.append(item);                                // 3. insert
+
+list.prepend(document.createElement('li'));       // insert first
+item.remove();                                    // delete an element
+```
+
+Useful insertion methods: `append`, `prepend`, `before`, `after`, `replaceWith`, and `insertAdjacentHTML` for trusted HTML strings.
+
+### Building a list from data
+
+```js
+const tasks = [
+  { id: 1, text: 'Buy milk', done: false },
+  { id: 2, text: 'Walk the dog', done: true },
+  { id: 3, text: 'Read chapter 5', done: false },
+];
+
+function renderTasks(items) {
+  list.replaceChildren();                       // clear the old content
+  for (const task of items) {
+    const li = document.createElement('li');
+    li.className = 'task';
+    li.textContent = task.text;               // safe, even for user text
+    li.classList.toggle('done', task.done);   // second argument forces on/off
+    li.dataset.id = task.id;
+    list.append(li);
+  }
+}
+
+renderTasks(tasks);
+```
+
+A good pattern: keep your data in an array, then write a function that renders it. After changing the data, call the function again.
+
+## Moving around the tree
+
+You can reach elements relative to one you already have.
+
+```js
+const second = document.querySelectorAll('.task')[1];
+
+console.log(second.parentElement);              // the <ul>
+console.log(second.previousElementSibling);     // first <li>
+console.log(second.nextElementSibling);         // third <li>
+console.log(list.children.length);              // direct child elements
+console.log(list.firstElementChild, list.lastElementChild);
+console.log(second.closest('ul'));              // nearest ancestor matching a selector
+```
+
+Use `...Element...` versions. Plain `childNodes` and `nextSibling` also return text nodes made by whitespace.
+
+## Timers
+
+```js
+const timeoutId = setTimeout(() => {
+  console.log('Runs once, after 2 seconds');
+}, 2000);
+
+let seconds = 0;
+const intervalId = setInterval(() => {
+  seconds++;
+  title.textContent = `Open for ${seconds}s`;
+  if (seconds === 5) {
+    clearInterval(intervalId);                 // always stop intervals you no longer need
+  }
+}, 1000);
+
+clearTimeout(timeoutId);                       // cancel before it runs
+```
+
+Timers are **asynchronous**: the browser keeps running your other code and calls the function later.
+
+## Example: a clock
+
+```js title="clock.js"
+const clock = document.createElement('p');
+document.body.append(clock);
+
+function updateClock() {
+  clock.textContent = new Date().toLocaleTimeString();
+}
+
+updateClock();                        // show immediately instead of waiting a second
+setInterval(updateClock, 1000);
+```
+
+## Check yourself
+
+1. Select every `.task` and add a `data-index` attribute with its position.
+2. Write `addTask(text)` that appends a new `li.task` and ignores blank text.
+3. Why does `list.innerHTML = userText` worry security reviewers?
+
+<details>
+<summary>Answers</summary>
+
+```js
+// 1
+document.querySelectorAll('.task').forEach((task, index) => {
+  task.dataset.index = index;
+});
+
+// 2
+function addTask(text) {
+  const clean = text.trim();
+  if (clean === '') return;
+  const li = document.createElement('li');
+  li.className = 'task';
+  li.textContent = clean;
+  document.querySelector('#task-list').append(li);
+}
+```
+
+3. Anything a user types would be parsed as HTML, including `script`-like attributes. Use `textContent`.
+
+</details>

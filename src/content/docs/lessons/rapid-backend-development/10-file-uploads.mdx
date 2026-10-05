@@ -1,0 +1,303 @@
+---
+title: "10. Static Files, Media and File Uploads"
+description: "Serve CSS and images, accept uploads with FileField and ImageField, and validate files before trusting them."
+difficulty: intermediate
+readingTime: 15
+tags: [django, files, uploads, media, static]
+sidebar:
+  order: 10
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Django treats two kinds of files differently.
+
+| Kind | Examples | Who supplies it | Setting | Folder |
+| ---- | -------- | --------------- | ------- | ------ |
+| **Static** | CSS, JavaScript, logo | You, the developer | `STATIC_URL`, `STATICFILES_DIRS` | `static/` |
+| **Media** | Book covers, PDF samples | Users, at runtime | `MEDIA_URL`, `MEDIA_ROOT` | `media/` |
+
+Static files are part of your code and are committed to Git. Media files are data, so they are **not** committed.
+
+## Configure media
+
+Image fields need the Pillow library:
+
+```sh
+pip install Pillow
+pip freeze > requirements.txt
+```
+
+```python title="bookclub/settings.py (excerpt)"
+STATIC_URL = 'static/'
+STATICFILES_DIRS = [BASE_DIR / 'static']
+
+MEDIA_URL = 'media/'                  # the URL prefix for uploads
+MEDIA_ROOT = BASE_DIR / 'media'       # the folder on disk where uploads are stored
+```
+
+During development, let Django serve the media folder. Add this to the **project** URLs:
+
+```python title="bookclub/urls.py"
+from django.conf import settings
+from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import include, path
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("accounts/", include("accounts.urls")),
+    path("accounts/", include("django.contrib.auth.urls")),
+    path("", include("books.urls")),
+]
+
+if settings.DEBUG:
+    # Development only. In production a web server or cloud storage serves the files.
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+```
+
+Add `media/` to your `.gitignore`.
+
+## File fields on the model
+
+`ImageField` is a `FileField` that also checks that the upload is a real image. The database stores only the **path**, and the file itself lives in `MEDIA_ROOT`.
+
+```python title="books/models.py"
+from django.conf import settings
+from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator
+from django.db import models
+
+
+class Author(models.Model):
+    name = models.CharField(max_length=120)
+    born = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Genre(models.Model):
+    name = models.CharField(max_length=60, unique=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Book(models.Model):
+    title = models.CharField(max_length=200)
+    author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name="books")
+    genres = models.ManyToManyField(Genre, related_name="books", blank=True)
+    published_year = models.PositiveSmallIntegerField()
+    pages = models.PositiveIntegerField(default=0)
+    summary = models.TextField(blank=True)
+    cover = models.ImageField(upload_to="covers/", blank=True)
+    sample = models.FileField(
+        upload_to="samples/",
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=["pdf"])],
+    )
+    added_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="added_books",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["title"]
+
+    def __str__(self):
+        return self.title
+
+
+class Review(models.Model):
+    book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name="reviews")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="reviews")
+    rating = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+    )
+    text = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["book", "user"], name="one_review_per_user_per_book"),
+        ]
+
+    def __str__(self):
+        return f"{self.user} rated {self.book} {self.rating}/5"
+```
+
+```sh
+python manage.py makemigrations
+python manage.py migrate
+```
+
+`upload_to="covers/"` stores files in `media/covers/`. For per-user folders or safer names, pass a function:
+
+```python
+import uuid
+from pathlib import Path
+
+
+def cover_path(instance, filename):
+    # A random name stops uploads overwriting each other and hides the original filename
+    return f"covers/{uuid.uuid4().hex}{Path(filename).suffix.lower()}"
+
+cover = models.ImageField(upload_to=cover_path, blank=True)
+```
+
+## Handling the upload in a form
+
+Two changes make uploads work. The HTML form needs `enctype="multipart/form-data"`, and the view must pass `request.FILES` to the form (files are not in `request.POST`).
+
+```python title="books/forms.py"
+from datetime import date
+
+from django import forms
+from django.core.exceptions import ValidationError
+
+from .models import Book, Review
+
+MAX_COVER_BYTES = 2 * 1024 * 1024        # 2 MB
+MAX_SAMPLE_BYTES = 5 * 1024 * 1024       # 5 MB
+
+
+class BookForm(forms.ModelForm):
+    class Meta:
+        model = Book
+        fields = ["title", "author", "genres", "published_year", "pages", "summary", "cover", "sample"]
+        widgets = {
+            "summary": forms.Textarea(attrs={"rows": 4}),
+            "genres": forms.CheckboxSelectMultiple,
+        }
+        help_texts = {
+            "pages": "Total printed pages.",
+            "sample": "Optional PDF sample, up to 5 MB.",
+        }
+
+    def clean_title(self):
+        title = self.cleaned_data["title"].strip()
+        if title.isdigit():
+            raise ValidationError("A title cannot be only numbers.")
+        return title
+
+    def clean_published_year(self):
+        year = self.cleaned_data["published_year"]
+        if not 1000 <= year <= date.today().year:
+            raise ValidationError(f"Enter a year between 1000 and {date.today().year}.")
+        return year
+
+    def clean_cover(self):
+        cover = self.cleaned_data.get("cover")
+        # A newly uploaded file has a size; an unchanged existing file does not need rechecking
+        if cover and hasattr(cover, "size") and cover.size > MAX_COVER_BYTES:
+            raise ValidationError("Covers must be 2 MB or smaller.")
+        return cover
+
+    def clean_sample(self):
+        sample = self.cleaned_data.get("sample")
+        if sample and hasattr(sample, "size") and sample.size > MAX_SAMPLE_BYTES:
+            raise ValidationError("Samples must be 5 MB or smaller.")
+        return sample
+
+    def clean(self):
+        cleaned = super().clean()
+        title, author = cleaned.get("title"), cleaned.get("author")
+        if title and author:
+            duplicates = Book.objects.filter(title__iexact=title, author=author)
+            if self.instance.pk:
+                duplicates = duplicates.exclude(pk=self.instance.pk)
+            if duplicates.exists():
+                raise ValidationError("That author already has a book with this title.")
+        return cleaned
+
+
+class ReviewForm(forms.ModelForm):
+    class Meta:
+        model = Review
+        fields = ["rating", "text"]
+        widgets = {"text": forms.Textarea(attrs={"rows": 4})}
+```
+
+In `books/views.py`, pass `request.FILES` as the second argument in `book_create` and `book_update`:
+
+```python title="books/views.py (excerpt)"
+# in book_create
+form = BookForm(request.POST, request.FILES)
+
+# in book_update
+form = BookForm(request.POST, request.FILES, instance=book)
+```
+
+And in the form template:
+
+```jinja title="books/templates/books/book_form.html"
+{% extends "base.html" %}
+
+{% block title %}{{ heading }} | Book Club{% endblock %}
+
+{% block content %}
+  <h1>{{ heading }}</h1>
+
+  <form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Save</button>
+    <a href="{% url 'books:book_list' %}">Cancel</a>
+  </form>
+{% endblock %}
+```
+
+## Showing uploaded files
+
+A `FileField` value exposes `.url`, `.path`, `.name` and `.size`. Always check that a file exists before reading `.url`, because an empty field raises an error.
+
+```jinja title="books/templates/books/book_detail.html (excerpt)"
+{% if book.cover %}
+  <img src="{{ book.cover.url }}" alt="Cover of {{ book.title }}" width="200">
+{% endif %}
+{% if book.sample %}
+  <p><a href="{{ book.sample.url }}">Read a sample (PDF)</a></p>
+{% endif %}
+```
+
+Put this block right after the `<h1>` in the detail template.
+
+## Treat uploads as hostile
+
+| Risk | Defence |
+| ---- | ------- |
+| Huge files fill the disk | Check `size`; also limit the request in your web server (`DATA_UPLOAD_MAX_MEMORY_SIZE`) |
+| A script disguised as an image | Use `ImageField` (Pillow verifies the file), and `FileExtensionValidator` for documents |
+| Filename collisions or path tricks | Django strips directories from names; a UUID `upload_to` removes the problem entirely |
+| Running uploaded files | Never serve media as executable code; serve from a separate domain or storage bucket when you can |
+| Lost files on redeploy | Many hosts (Render included) have an **ephemeral disk**. Use cloud storage such as S3 for real media. |
+
+<Aside type="caution" title="Deleting a row does not delete its file">
+Django leaves the file on disk when a model instance is deleted. For a production app, remove it explicitly with `book.cover.delete(save=False)`, or use a storage backend with lifecycle rules.
+</Aside>
+
+## Check yourself
+
+1. Why is `request.FILES` separate from `request.POST`?
+2. A user uploads `evil.php` as a cover. What stops it?
+3. Where should uploaded user photos be stored for a site deployed on a platform with an ephemeral disk?
+
+<details>
+<summary>Answers</summary>
+
+1. File data is large and sent as a different part of a `multipart/form-data` request. Django keeps files in a separate dictionary of `UploadedFile` objects.
+2. `ImageField` asks Pillow to open the file. A PHP file is not a valid image, so the form reports an error and nothing is saved.
+3. In external object storage (Amazon S3, Cloudinary, Google Cloud Storage), configured through Django's `STORAGES` setting, not on the web server's local disk.
+
+</details>

@@ -1,0 +1,158 @@
+---
+title: "1. Introduction and JavaScript Prerequisites"
+description: "Learn what React is and why it is worth learning, then check that the JavaScript it builds on is solid."
+difficulty: beginner
+readingTime: 14
+tags: [react, javascript, prerequisites]
+sidebar:
+  order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+React is a JavaScript library for building user interfaces. You describe what the screen should look like for the current
+data, and React updates the page when the data changes. It was created at Facebook and is developed in the open with a very large community.
+
+## Why learn React
+
+- **Components.** You build small, reusable pieces of UI and combine them into whole applications.
+- **Easy to reason about.** You write code that says what the UI looks like for a given state, instead of manually finding and editing DOM elements.
+- **Reaches beyond the browser.** The same ideas power React Native for mobile apps, and React is the base of popular stacks such as MERN and PERN and of frameworks such as Next.js.
+- **Large ecosystem and community.** Almost every problem you meet already has a well-tested library and many tutorials.
+
+The [source guide](https://jsmastery.pro) for this section points to the Stack Overflow Developer Survey (41.6% of developers chose React) and to React topping the State of JS survey for six years in a row. Those were snapshots from when it was written, so check the latest survey results before you quote a number.
+
+### React is a library, not a framework
+
+React only handles the view layer. Routing, data fetching, forms and global state come from other libraries, which is why this guide has lessons for each of them. That is also why the [official React documentation](https://react.dev/learn/creating-a-react-app) recommends starting a production app with a framework such as Next.js, React Router or Expo, which bundle those decisions for you.
+
+In this course you will build a project with plain Vite and React. It is the best way to learn how the pieces fit, and everything you learn carries straight over to those frameworks.
+
+### React and its alternatives
+
+Vue, Svelte, Astro and Angular solve similar problems in different ways. This documentation site itself is built with Astro and Svelte. Learning one library well makes the next one much easier, because the core ideas (components, state, events) are shared.
+
+## The only prerequisite is JavaScript
+
+Most React struggles are really JavaScript struggles. Before you start, make sure you are comfortable with everything on this list. The refresher below is quick, and
+[Frontend Development](/lessons/frontend-development/) covers the same ground in more depth.
+
+| Topic | One-line reminder |
+| ----- | ----------------- |
+| Basic syntax | Variables with `const` and `let`, functions, conditions, loops |
+| Arrow functions | `(a, b) => a + b` is a short function expression |
+| Template literals | Backticks with `${expression}` inside |
+| Array methods | `map`, `filter`, `find`, `reduce` return new values and do not change the original array |
+| Object property shorthand | `{ name, price }` means `{ name: name, price: price }` |
+| Destructuring | Pull values out of objects and arrays into variables |
+| Rest and spread | `...` collects values in a parameter list and spreads values out in a literal |
+| Promises and async/await | Work with values that arrive later, such as server responses |
+| Import and export | Split code across files with ES modules |
+
+## Refresher: everything in one file
+
+Create two small files and run them with `node main.js`. Node treats `.js` files as ES modules when `package.json` contains `"type": "module"`.
+
+```js title="cart.js"
+export const TAX_RATE = 0.05;
+
+export function formatPrice(amount) {
+  return `$${amount.toFixed(2)}`;
+}
+
+export default function total(items) {
+  return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+}
+```
+
+```js title="main.js"
+import total, { TAX_RATE, formatPrice } from './cart.js';
+
+// Arrow functions and template literals
+const greet = (name) => `Hello, ${name}!`;
+console.log(greet('Ada'));                      // Hello, Ada!
+
+// Array methods
+const items = [
+  { name: 'Pen', price: 1.5, quantity: 4 },
+  { name: 'Notebook', price: 4, quantity: 2 },
+  { name: 'Bag', price: 30, quantity: 1 },
+];
+const names = items.map((item) => item.name);
+const cheap = items.filter((item) => item.price < 5);
+const bag = items.find((item) => item.name === 'Bag');
+console.log(names, cheap.length, bag.price);    // [ 'Pen', 'Notebook', 'Bag' ] 2 30
+console.log(formatPrice(total(items)));         // $44.00
+console.log(formatPrice(total(items) * (1 + TAX_RATE)));   // $46.20
+
+// Destructuring and property shorthand
+const { name, price } = items[0];
+const [first, , third] = names;                 // the empty slot skips the second item
+const product = { name, price };                // same as { name: name, price: price }
+console.log(product, first, third);             // { name: 'Pen', price: 1.5 } Pen Bag
+
+// Rest and spread
+function sum(...numbers) {                      // rest: collect the arguments into an array
+  return numbers.reduce((a, b) => a + b, 0);
+}
+const more = [...names, 'Eraser'];              // spread: copy an array and add to it
+const updated = { ...items[0], quantity: 10 };  // spread: copy an object and override one field
+const { quantity, ...withoutQuantity } = updated;
+console.log(sum(1, 2, 3), more, updated.quantity, quantity, withoutQuantity);
+
+// Promises and async/await
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function load() {
+  await wait(10);
+  return { ok: true };
+}
+
+load().then((result) => console.log('then', result));
+
+try {
+  const result = await load();
+  console.log('await', result);
+} catch (error) {
+  console.log(error.message);
+}
+```
+
+<Aside type="tip" title="Why spread matters so much">
+React state must never be changed in place. You will copy arrays and objects with spread, `map` and `filter` in almost every lesson, so make sure `[...items, newItem]` and `{ ...user, name: 'Sam' }` feel natural.
+</Aside>
+
+## The roadmap for this guide
+
+The lessons follow the learning order of the source guide, using one project that grows as you go: **Filmshelf**, a movie tracker. Each lesson ends with practice problems and answers.
+
+| Roadmap stage | Lessons |
+| ------------- | ------- |
+| Setup and project structure | 2 |
+| Core concepts: components, JSX, props, state, events, styling, conditional rendering | 3 to 8 |
+| Hooks: `useState`, `useEffect`, `useRef`, `useContext`, `useReducer`, `useMemo`, `useCallback` | 5, 9 to 12 |
+| Popular packages: React Router, TanStack Query, Axios, React Hook Form | 13, 14 |
+| State management | 15 |
+| Testing | 16 |
+| Deployment | 17 |
+| What to learn next and project ideas | 18 |
+
+## Check yourself
+
+1. What does `const { a, ...rest } = { a: 1, b: 2, c: 3 };` put in `rest`?
+2. Write an arrow function `double` that returns a number multiplied by two, then use `map` to double `[1, 2, 3]`.
+3. What is wrong with `items.push(newItem)` if `items` is state you must not change in place, and what should you write instead?
+4. What does `await` do, and where can you use it?
+
+<details>
+<summary>Answers</summary>
+
+1. `rest` is `{ b: 2, c: 3 }`.
+2. ```js
+   const double = (n) => n * 2;
+   [1, 2, 3].map(double);   // [2, 4, 6]
+   ```
+3. `push` changes the existing array. Create a new one instead: `const next = [...items, newItem];`.
+4. `await` pauses an `async` function until a promise settles and gives you its value. It works inside `async` functions and at the top level of ES modules.
+
+</details>

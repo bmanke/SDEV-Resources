@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Imports SDEV2501 exercise notes into Guides > SDEV-2150 Intermediate Frontend > Exercises.
+Imports SDEV2501 exercise notes into Second Semester > Intermediate Frontend Development > Exercises.
 
   python3 scripts/import-sdev-exercises.py /path/to/SDEV-Resources
 """
