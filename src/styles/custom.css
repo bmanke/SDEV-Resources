@@ -5,18 +5,22 @@
  * Dark / Light / Auto (system) and persists the choice in localStorage.
  */
 :root {
-	--sl-color-accent-low: #3a1606;
-	--sl-color-accent: #ff5a1f;
-	--sl-color-accent-high: #ffc4ad;
+	--sl-color-accent-low: #2a1a5e;
+	--sl-color-accent: #8b5cf6;
+	--sl-color-accent-high: #d4c4ff;
 
-	--sl-color-white: #f5f3f0;
-	--sl-color-gray-1: #e6e2dd;
-	--sl-color-gray-2: #bdb7af;
-	--sl-color-gray-3: #8a837a;
-	--sl-color-gray-4: #57514a;
-	--sl-color-gray-5: #39342f;
-	--sl-color-gray-6: #24211e;
-	--sl-color-black: #171513;
+	/* Blue companion colour: gradients, focus rings and highlights */
+	--brand-purple: #8b5cf6;
+	--brand-blue: #3b82f6;
+
+	--sl-color-white: #f3f4fb;
+	--sl-color-gray-1: #e1e4f2;
+	--sl-color-gray-2: #b5bad4;
+	--sl-color-gray-3: #7f86a8;
+	--sl-color-gray-4: #4f567a;
+	--sl-color-gray-5: #333a5e;
+	--sl-color-gray-6: #202545;
+	--sl-color-black: #121530;
 
 	--sl-font: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 	--sl-font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
@@ -29,18 +33,21 @@
 }
 
 :root[data-theme='light'] {
-	--sl-color-accent-low: #ffe1d4;
-	--sl-color-accent: #c73a06;
-	--sl-color-accent-high: #5e1b02;
+	--sl-color-accent-low: #e9e0ff;
+	--sl-color-accent: #6d3fd9;
+	--sl-color-accent-high: #34196e;
 
-	--sl-color-white: #1a1714;
-	--sl-color-gray-1: #2b2724;
-	--sl-color-gray-2: #48423c;
-	--sl-color-gray-3: #6f685f;
-	--sl-color-gray-4: #9f978d;
-	--sl-color-gray-5: #d9d3cb;
-	--sl-color-gray-6: #f2eee9;
-	--sl-color-gray-7: #f8f6f3;
+	--brand-purple: #6d3fd9;
+	--brand-blue: #1d5fd1;
+
+	--sl-color-white: #14173a;
+	--sl-color-gray-1: #232850;
+	--sl-color-gray-2: #424870;
+	--sl-color-gray-3: #646b94;
+	--sl-color-gray-4: #959bbd;
+	--sl-color-gray-5: #d4d8ec;
+	--sl-color-gray-6: #eceefa;
+	--sl-color-gray-7: #f5f6fd;
 	--sl-color-black: #ffffff;
 
 	--widget-bg: var(--sl-color-gray-7);
@@ -50,6 +57,21 @@
 /* Splash page hero polish */
 .hero h1 {
 	letter-spacing: -0.02em;
+	background: linear-gradient(90deg, var(--brand-purple), var(--brand-blue));
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+}
+
+/* Purple to blue accent line under the header */
+header.header {
+	border-bottom: 2px solid transparent;
+	border-image: linear-gradient(90deg, var(--brand-purple), var(--brand-blue)) 1;
+}
+
+/* Links and selection use the blue half of the scheme */
+::selection {
+	background: color-mix(in srgb, var(--brand-blue) 35%, transparent);
 }
 
 /* Show code exactly as it is typed: JetBrains Mono's ligatures would draw
