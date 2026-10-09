@@ -1,44 +1,162 @@
 ---
 import Default from '@astrojs/starlight/components/Footer.astro';
-import { Icon } from '@astrojs/starlight/components';
 
-const repo = 'https://github.com/bmanke/SDEV-Resources';
+const REPO_URL = 'https://github.com/bmanke/SDEV-Resources';
 ---
 
-<div class="contribute">
-	<Icon name="github" size="1.5rem" />
-	<p>
-		Found a mistake or want to add something? This site is open source.<br/>
-		<a href={`${repo}/issues/new`} target="_blank" rel="noopener">Open an issue</a>,
-		<a href={`${repo}/pulls`} target="_blank" rel="noopener">send a pull request</a>, or
-		<a href={repo} target="_blank" rel="noopener"> view the repository</a>.
-	</p>
-</div>
+<section class="contribute" aria-labelledby="contribute-heading">
+	<div class="info">
+		<a
+			class="icon-link"
+			href={REPO_URL}
+			target="_blank"
+			rel="noopener noreferrer"
+			aria-label="View the project on GitHub (opens in a new tab)"
+		>
+			<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+				<path d="M12 .75a11.25 11.25 0 0 0-3.558 21.922c.563.104.768-.244.768-.542 0-.267-.01-.974-.015-1.912-3.13.68-3.79-1.51-3.79-1.51-.512-1.3-1.25-1.647-1.25-1.647-1.022-.699.077-.685.077-.685 1.13.08 1.724 1.16 1.724 1.16 1.004 1.72 2.633 1.223 3.275.935.102-.727.393-1.223.715-1.504-2.499-.284-5.126-1.25-5.126-5.562 0-1.229.44-2.233 1.16-3.02-.116-.284-.503-1.428.11-2.977 0 0 .945-.303 3.094 1.154A10.79 10.79 0 0 1 12 6.182c.956.004 1.918.129 2.817.38 2.148-1.457 3.092-1.154 3.092-1.154.614 1.549.227 2.693.112 2.978.722.786 1.158 1.79 1.158 3.019 0 4.323-2.632 5.275-5.139 5.553.404.348.766 1.034.766 2.084 0 1.504-.014 2.717-.014 3.086 0 .3.203.65.774.54A11.25 11.25 0 0 0 12 .75Z" />
+			</svg>
+		</a>
+		<div>
+			<h2 id="contribute-heading">Help improve this site</h2>
+			<p>Create an issue or make a pull request for changes.</p>
+			<a class="repo-link" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+				View repository <span class="arrow" aria-hidden="true">&#8599;&#xFE0E;</span>
+				<span class="sr-only"> (opens in a new tab)</span>
+			</a>
+		</div>
+	</div>
+
+	<div class="actions">
+		<a class="btn primary" href={`${REPO_URL}/issues/new/choose`} target="_blank" rel="noopener noreferrer">
+			Create an issue <span class="arrow" aria-hidden="true">&#8599;&#xFE0E;</span>
+			<span class="sr-only"> (opens in a new tab)</span>
+		</a>
+		<a class="btn secondary" href={`${REPO_URL}/compare`} target="_blank" rel="noopener noreferrer">
+			Make a pull request <span class="arrow" aria-hidden="true">&#8599;&#xFE0E;</span>
+			<span class="sr-only"> (opens in a new tab)</span>
+		</a>
+	</div>
+</section>
 
 <Default {...Astro.props}><slot /></Default>
 
 <style>
 	.contribute {
 		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		margin-top: 2rem;
-		padding: 1rem 1.25rem;
+		flex-direction: column;
+		gap: 1.25rem;
+		margin-top: 2.5rem;
+		padding: 1.25rem;
 		border: 1px solid var(--sl-color-gray-5);
-		border-radius: 0.6rem;
+		border-radius: 0.75rem;
 		background: var(--sl-color-gray-6);
-		color: var(--sl-color-gray-2);
 	}
-	.contribute :global(svg) {
+	@media (min-width: 40rem) {
+		.contribute {
+			flex-direction: row;
+			flex-wrap: wrap;
+			align-items: center;
+			justify-content: space-between;
+			padding: 1.5rem;
+		}
+		.info {
+			flex: 1 1 16rem;
+		}
+		.actions {
+			flex-shrink: 0;
+		}
+	}
+	.info {
+		display: flex;
+		align-items: flex-start;
+		gap: 1rem;
+	}
+	.icon-link {
+		display: flex;
 		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		width: 2.75rem;
+		height: 2.75rem;
+		border-radius: 0.75rem;
+		border: 1px solid color-mix(in srgb, var(--sl-color-accent) 30%, transparent);
+		background: color-mix(in srgb, var(--sl-color-accent) 8%, transparent);
 		color: var(--sl-color-accent);
+		transition: background 150ms ease;
+	}
+	.icon-link:hover {
+		background: color-mix(in srgb, var(--sl-color-accent) 18%, transparent);
+	}
+	.icon-link svg {
+		width: 1.5rem;
+		height: 1.5rem;
+	}
+	h2 {
+		margin: 0;
+		font-size: var(--sl-text-base);
+		font-weight: 600;
+		letter-spacing: -0.01em;
+		line-height: 1.4;
+		color: var(--sl-color-white);
 	}
 	p {
-		margin: 0;
+		margin: 0.25rem 0 0;
 		font-size: var(--sl-text-sm);
+		line-height: 1.6;
+		color: var(--sl-color-gray-3);
 	}
-	a {
-		color: var(--sl-color-accent-high);
-		font-weight: 600;
+	.repo-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-top: 0.5rem;
+		font-size: var(--sl-text-xs);
+		color: var(--sl-color-gray-3);
+		text-decoration: none;
+		transition: color 150ms ease;
+	}
+	.repo-link:hover {
+		color: var(--sl-color-accent);
+	}
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+	}
+	.btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		padding: 0.625rem 1rem;
+		border-radius: 0.5rem;
+		font-size: var(--sl-text-sm);
+		font-weight: 500;
+		text-decoration: none;
+		transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+	}
+	.btn.primary {
+		background: var(--sl-color-accent);
+		color: #fff;
+	}
+	.btn.primary:hover {
+		background: color-mix(in srgb, var(--sl-color-accent) 82%, white);
+	}
+	.btn.secondary {
+		border: 1px solid var(--sl-color-gray-4);
+		color: var(--sl-color-gray-1);
+	}
+	.btn.secondary:hover {
+		border-color: var(--sl-color-accent);
+		color: var(--sl-color-accent);
+	}
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
 	}
 </style>
