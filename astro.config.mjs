@@ -20,7 +20,7 @@ export default defineConfig({
 			},
 			favicon: '/favicon.svg',
 			social: [
-				{ icon: 'github', label: 'GitHub', href: 'https://github.com/bmanke/SDEV-Resources' },
+				{ icon: 'github', label: 'GitHub repository: report issues and send pull requests', href: 'https://github.com/bmanke/SDEV-Resources' },
 			],
 			editLink: {
 				baseUrl: "https://github.com/bmanke/SDEV-Resources/edit/main/",
@@ -34,6 +34,7 @@ export default defineConfig({
 			// Swap or extend any built-in Starlight component.
 			components: {
 				PageTitle: './src/components/overrides/PageTitle.astro',
+				Footer: './src/components/overrides/Footer.astro',
 			},
 			// Full-text search is powered by Pagefind and is ON by default.
 			// It indexes the site during `astro build` (search is unavailable in `astro dev`).
