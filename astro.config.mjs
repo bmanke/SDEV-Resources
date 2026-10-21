@@ -14,9 +14,6 @@ export default defineConfig({
 			title: 'Software Development Resources',
 			description:
 				'A repository with code comments on exercises and assignments.',
-			logo: {
-				replacesTitle: false,
-			},
 			favicon: '/favicon.svg',
 			social: [
 				{ icon: 'github', label: 'GitHub repository: report issues and send pull requests', href: 'https://github.com/bmanke/SDEV-Resources' },
