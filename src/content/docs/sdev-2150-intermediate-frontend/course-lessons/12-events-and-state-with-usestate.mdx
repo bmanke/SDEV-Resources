@@ -1,0 +1,126 @@
+---
+title: "12. Events and State with useState"
+description: "Making the UI interactive: controlled inputs, multi-select category buttons and checkboxes, all with useState."
+sidebar:
+  order: 12
+difficulty: intermediate
+readingTime: 40
+tags: [react, state, usestate, forms, events]
+---
+
+Through Lesson 11 the Campus Eats UI is static. It renders data, but nothing changes when the user interacts with it. This lesson adds state, and the UI becomes a function of that state.
+
+`useState` is a hook. It returns the current value of a piece of state and a function to change it.
+
+```jsx
+const [searchTerm, setSearchTerm] = useState('');
+```
+
+Calling `setSearchTerm('coffee')` changes the state and re-runs the component. The DOM updates because React re-renders, not because you changed it.
+
+## Controlled text input
+
+An input whose `value` is state and whose `onChange` sets that state.
+
+```jsx
+const [searchTerm, setSearchTerm] = useState('');
+
+<input
+  type="search"
+  className="input input-bordered w-full"
+  placeholder="Search spots..."
+  value={searchTerm}
+  onChange={(e) => setSearchTerm(e.target.value)}
+/>
+```
+
+The input now shows what is in state, and typing updates state. The component re-renders on every keystroke.
+
+Before state, the input was already displaying what you typed. The browser does that on its own. What was missing was a value your code could read. There is no `document.querySelector` in React, so without state there is no way to get the field's value.
+
+## Multi-select category buttons
+
+Categories can be selected or cleared one at a time. An array in state, and a function that adds or removes.
+
+```jsx
+const [selectedCategories, setSelectedCategories] = useState([]);
+
+function toggleCategory(category) {
+  setSelectedCategories((prev) =>
+    prev.includes(category)
+      ? prev.filter((c) => c !== category)
+      : [...prev, category]
+  );
+}
+```
+
+Note the updater form. `setSelectedCategories` takes a function that receives the previous value and returns the next one. Use it whenever the next state depends on the current state.
+
+```jsx
+<button
+  className={`btn btn-sm ${selectedCategories.includes(label) ? 'btn-primary' : 'btn-outline'}`}
+  onClick={() => toggleCategory(label)}
+>
+  {label}
+</button>
+```
+
+The class depends on state, so the button's appearance changes when the array changes. No manual `classList` toggling.
+
+## Controlled checkbox
+
+A boolean in state, driven by the checkbox's `checked` property.
+
+```jsx
+const [openNowOnly, setOpenNowOnly] = useState(false);
+
+<label className="label cursor-pointer">
+  <span className="label-text">Open now only</span>
+  <input
+    type="checkbox"
+    className="checkbox"
+    checked={openNowOnly}
+    onChange={(e) => setOpenNowOnly(e.target.checked)}
+  />
+</label>
+```
+
+## Filter the list
+
+State is not useful until something reads it. Filter the spots with the three pieces of state.
+
+```jsx
+const visible = spots.filter((s) => {
+  const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase());
+  const matchesCategory =
+    selectedCategories.length === 0 || selectedCategories.includes(s.category);
+  const matchesOpen = !openNowOnly || s.openNow;
+  return matchesSearch && matchesCategory && matchesOpen;
+});
+```
+
+An empty `selectedCategories` means "no filter", which is why the length check comes first.
+
+## State lives in one component, for now
+
+`Filters` owns the search term, the categories and the open-now flag. `Results` needs them, but props only flow down. [Lesson 13](/sdev-2150-intermediate-frontend/course-lessons/13-lifting-state-and-conditional-rendering/) moves the state up so both components can see it.
+
+
+
+## Practice
+
+
+1. Add a "Clear filters" button that resets all three pieces of state.
+2. Add a price range with two number inputs and filter by it.
+3. Replace the three `useState` calls with one state object and describe one drawback.
+4. Explain why `setSelectedCategories([...prev, category])` is preferred over `setSelectedCategories(prev.concat(category))`.
+
+<details>
+<summary>Answers</summary>
+
+1. Three setter calls in one click handler, each setting the initial value.
+2. Two `useState(0)` calls, then `s.price >= min && s.price <= max` in the filter.
+3. Every update must spread the previous object, and one field's update can silently drop another's.
+4. They are equivalent here. The spread form is more common and reads as "new array from old plus one".
+
+</details>

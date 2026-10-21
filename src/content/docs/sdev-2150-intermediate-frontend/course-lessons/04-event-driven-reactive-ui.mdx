@@ -1,0 +1,161 @@
+---
+title: "4. Event-Driven Reactive UI"
+description: "Two kinds of reactivity with Web Components: selection reactivity, where picking an item updates a detail view, and filtering reactivity, where filters narrow a list."
+sidebar:
+  order: 4
+difficulty: beginner
+readingTime: 30
+tags: [web-components, events, reactivity]
+---
+
+Lesson 3 introduced the pattern with one event. This lesson uses it twice, for the two things a directory page does: selection and filtering.
+
+Selection reactivity is when a user picks one item and a detail view updates. Filtering reactivity is when a user narrows a list. Both use the same three pieces from Lesson 3, so build them the same way.
+
+## Selection reactivity
+
+The results list should not know what the details card looks like. It should announce which spot was picked.
+
+```js
+class SpotResults extends HTMLElement {
+  connectedCallback() {
+    this.spots = [
+      { id: 'tandoor', name: 'Tandoor Hut', price: 12 },
+      { id: 'noodlebar', name: 'Noodle Bar', price: 11 },
+    ];
+    this.render();
+
+    this.addEventListener('click', (e) => {
+      const li = e.target.closest('li');
+      if (!li) return;
+      const spot = this.spots.find((s) => s.id === li.dataset.id);
+      this.dispatchEvent(
+        new CustomEvent('spot-selected', { detail: { spot }, bubbles: true })
+      );
+    });
+  }
+
+  render() {
+    this.innerHTML = `
+      <h2>Results</h2>
+      <ul>
+        ${this.spots.map((s) => `<li data-id="${s.id}">${s.name}</li>`).join('')}
+      </ul>
+    `;
+  }
+}
+customElements.define('spot-results', SpotResults);
+```
+
+The details card listens.
+
+```js
+class SpotDetails extends HTMLElement {
+  connectedCallback() {
+    this.render(null);
+    this.addEventListener('spot-selected', (e) => this.render(e.detail.spot));
+  }
+
+  render(spot) {
+    this.innerHTML = spot
+      ? `<h2>${spot.name}</h2><p>$${spot.price}</p>`
+      : '<p>Pick a spot to see details.</p>';
+  }
+}
+customElements.define('spot-details', SpotDetails);
+```
+
+One event, one listener, one re-render. The list does not know the card exists.
+
+## Filtering reactivity
+
+Filters narrow a list. The filter announces the criteria, the list re-renders.
+
+```js
+class SpotFilters extends HTMLElement {
+  connectedCallback() {
+    this.innerHTML = `
+      <input type="search" placeholder="Search spots..." />
+      <button data-category="Hot lunch">Hot lunch</button>
+      <button data-category="Coffee">Coffee</button>
+      <label>
+        <input type="checkbox" /> Open now only
+      </label>
+    `;
+
+    this.querySelector('input[type="search"]').addEventListener('input', (e) => {
+      this.emit({ search: e.target.value });
+    });
+    this.querySelectorAll('button[data-category]').forEach((btn) => {
+      btn.addEventListener('click', () => this.emit({ category: btn.dataset.category }));
+    });
+    this.querySelector('input[type="checkbox"]').addEventListener('change', (e) => {
+      this.emit({ openNowOnly: e.target.checked });
+    });
+  }
+
+  emit(detail) {
+    this.dispatchEvent(new CustomEvent('filters-changed', { detail, bubbles: true }));
+  }
+}
+customElements.define('spot-filters', SpotFilters);
+```
+
+The list keeps one criteria object and re-renders on every event.
+
+```js
+class FilteredResults extends HTMLElement {
+  connectedCallback() {
+    this.spots = [
+      { name: 'Tandoor Hut', category: 'Hot lunch', openNow: true },
+      { name: 'Bridge Coffee Cart', category: 'Coffee', openNow: false },
+    ];
+    this.criteria = {};
+    this.render();
+
+    this.addEventListener('filters-changed', (e) => {
+      this.criteria = { ...this.criteria, ...e.detail };
+      this.render();
+    });
+  }
+
+  render() {
+    const visible = this.spots.filter((s) => {
+      const matchesSearch = !this.criteria.search
+        || s.name.toLowerCase().includes(this.criteria.search.toLowerCase());
+      const matchesCategory = !this.criteria.category
+        || s.category === this.criteria.category;
+      const matchesOpen = !this.criteria.openNowOnly || s.openNow;
+      return matchesSearch && matchesCategory && matchesOpen;
+    });
+
+    this.innerHTML = `<h2>Results (${visible.length})</h2>
+      <ul>${visible.map((s) => `<li>${s.name}</li>`).join('')}</ul>`;
+  }
+}
+customElements.define('filtered-results', FilteredResults);
+```
+
+## Why events, in one sentence
+
+An event is a message about what changed. A re-render is a response to that message. Everything else in this course, up to and including React's state, is a more convenient way to send the same message.
+
+
+
+## Practice
+
+
+1. Combine both patterns on one page: filters narrow the list, and clicking a result updates the details card.
+2. Add a count badge to the results heading that shows how many spots match the current filters.
+3. Emit a single event with the whole criteria object instead of one field per event, and explain why that is easier to reason about.
+4. Describe in one sentence how `useState` replaces the custom event in React.
+
+<details>
+<summary>Answers</summary>
+
+1. Two `addEventListener` calls on the page, one for each event name.
+2. Render `visible.length` inside the heading.
+3. The list always has one source of truth instead of merging partial updates.
+4. Calling the state setter is the event, and React re-runs the component in response.
+
+</details>

@@ -1,0 +1,111 @@
+---
+title: "18. Dynamic Routes"
+description: "Route parameters with :id, loading one spot by its URL, and linking to a specific item."
+sidebar:
+  order: 18
+difficulty: intermediate
+readingTime: 30
+tags: [react, routing, params]
+---
+
+Lesson 17 gave Campus Eats two URLs. This lesson adds one per spot: `/admin/tandoor` for the Tandoor Hut edit form.
+
+## The route
+
+```jsx
+{ path: 'admin/:spotId', Component: AdminPage }
+```
+
+`:spotId` is a parameter. It matches any single segment, and the matched value is available to the component.
+
+## Read the parameter
+
+```jsx
+import { useParams } from 'react-router';
+
+function AdminPage() {
+  const { spotId } = useParams();
+  // spotId is undefined for /admin, and a string for /admin/:spotId
+}
+```
+
+## Link to it
+
+```jsx
+<a className="link" href={`/admin/${spot.id}`}>Edit</a>
+```
+
+Prefer the router's `Link` or `NavLink`, which navigate without a full reload.
+
+```jsx
+import { Link } from 'react-router';
+
+<Link to={`/admin/${spot.id}`}>Edit</Link>
+```
+
+## One component, two modes
+
+The admin page with a `spotId` is an edit form. Without one, it is a create form. One component can serve both.
+
+```jsx
+export default function AdminPage() {
+  const { spotId } = useParams();
+  const editing = Boolean(spotId);
+  const [form, setForm] = useState(
+    editing
+      ? { name: '', category: '', building: '', price: 0, rating: 3, openNow: false }
+      : { name: '', category: '', building: '', price: 0, rating: 3, openNow: false }
+  );
+
+  return (
+    <div className="card bg-base-100 shadow-sm">
+      <div className="card-body">
+        <h2 className="card-title">{editing ? 'Edit spot' : 'Add a spot'}</h2>
+        <p>spotId: {spotId ?? 'none'}</p>
+      </div>
+    </div>
+  );
+}
+```
+
+In a real version the edit form loads the spot by id, which is [Lesson 19](/sdev-2150-intermediate-frontend/course-lessons/19-react-router-data-mode/)'s job with a loader.
+
+## Multiple parameters
+
+```jsx
+{ path: 'buildings/:buildingId/spots/:spotId', Component: SpotPage }
+```
+
+```jsx
+const { buildingId, spotId } = useParams();
+```
+
+## Optional segments
+
+A segment followed by `?` is optional.
+
+```jsx
+{ path: 'admin/:spotId?', Component: AdminPage }
+```
+
+That one route matches both `/admin` and `/admin/tandoor`. It replaces the two-route version, at the cost of a component that must handle both cases.
+
+
+
+## Practice
+
+
+1. Add a `Rating` badge to the edit form that only renders when editing.
+2. Add a `/spots/:spotId` public route that shows one spot's details.
+3. Add a redirect from `/admin/:spotId/edit` to `/admin/:spotId`.
+4. Explain why the two-route version, with and without the parameter, is often clearer than one route with `?`.
+
+<details>
+<summary>Answers</summary>
+
+1. `{editing && <span className="badge">Editing</span>}`.
+2. One route, one `useParams`, one fetch by id.
+3. `redirect` in a small wrapper component or a route-level `loader`.
+4. The component can assume the parameter is present, so it does not need two code paths.
+
+</details>

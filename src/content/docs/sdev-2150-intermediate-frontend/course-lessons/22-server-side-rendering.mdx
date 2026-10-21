@@ -1,0 +1,127 @@
+---
+title: "22. Server-Side Rendering"
+description: "A small Node and Express SSR demo, the difference between CSR and SSR, and what hydration is."
+sidebar:
+  order: 22
+difficulty: intermediate
+readingTime: 30
+tags: [react, ssr, rendering, express]
+---
+
+Lesson 21 showed what a CSR app sends: an empty shell. This lesson shows the alternative, with a small server that renders the HTML itself.
+
+## The problem CSR creates
+
+```text
+HTML loads -> JavaScript loads -> React renders -> UI appears
+```
+
+Each arrow is a wait. The first three happen before the user sees anything.
+
+## What SSR is
+
+The server generates HTML for the requested route. The browser receives ready-to-display content. JavaScript loads afterward to make it interactive.
+
+```text
+User requests page -> Server renders HTML -> Browser displays content -> JavaScript loads -> React hydrates
+```
+
+The user sees content before the JavaScript arrives. That is the whole point.
+
+## A small SSR demo
+
+This is plain Node and Express, no React, to make the mechanism visible.
+
+```js
+import express from 'express';
+
+const app = express();
+
+app.get('/', (req, res) => {
+  res.send(`
+    <html>
+      <body>
+        <h1>Server Rendered Page</h1>
+        <p>This content was generated on the server.</p>
+        <button id="test-btn">Click me</button>
+        <script src="/client.js"></script>
+      </body>
+    </html>
+  );
+});
+
+app.use(express.static('public'));
+
+app.listen(3001, () => console.log('SSR demo on http://localhost:3001'));
+```
+
+```js
+// public/client.js
+document.getElementById('test-btn')?.addEventListener('click', () => {
+  alert('Button is now interactive');
+});
+```
+
+Disable JavaScript and reload. The content is still there. The button does nothing.
+
+## Compare
+
+CSR HTML:
+
+```html
+<div id="root"></div>
+```
+
+SSR HTML:
+
+```html
+<h1>Server Rendered Page</h1>
+<p>This content was generated on the server.</p>
+```
+
+The first is a container. The second is a page.
+
+## Hydration
+
+SSR alone is not enough. The application must still become interactive.
+
+Hydration is React attaching behaviour to server-rendered HTML. The client script in the demo is the same idea: the HTML was visible before the script made the button respond.
+
+```text
+Server -> HTML
+Client -> JavaScript loads
+React -> attaches event handlers
+UI -> becomes interactive
+```
+
+SSR provides content early. Hydration provides interactivity later. They are two separate steps, and conflating them is the most common confusion in this topic.
+
+## What SSR costs
+
+- A server, running, per request. A static file host is not enough.
+- Data fetching moves to the server, which changes how you think about [TanStack Query](/sdev-2150-intermediate-frontend/course-lessons/24-server-state-with-tanstack-query/).
+- Hydration mismatches, when the server HTML and the first client render disagree, are a real class of bug.
+
+## Frameworks
+
+This demo is hand-rolled to show the mechanism. Real applications use a framework. [Next.js](https://nextjs.org/), [Remix](https://remix.run/) and [React Router in framework mode](https://reactrouter.com/) all render on the server and hydrate on the client, and each handles the data and routing integration that a hand-rolled version leaves to you.
+
+
+
+## Practice
+
+
+1. Add a second route to the SSR demo that renders a list from an array.
+2. Add a `setTimeout` to `client.js` and describe what the user experiences.
+3. Explain why a hydration mismatch is a bug and not just a warning.
+4. Describe one case where SSR is clearly the wrong choice.
+
+<details>
+<summary>Answers</summary>
+
+1. A template literal with a `map` and a `join`.
+2. Content immediately, interactivity after the timeout. That gap is the SSR trade.
+3. React expects the server HTML and the first client render to agree. A mismatch means one of them is wrong about the state of the world.
+4. A fully interactive dashboard behind a login, where first content is not the bottleneck and a server is a cost.
+
+</details>

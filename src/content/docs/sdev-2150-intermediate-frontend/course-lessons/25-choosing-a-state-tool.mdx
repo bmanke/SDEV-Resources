@@ -1,0 +1,86 @@
+---
+title: "25. Choosing a State Tool"
+description: "A decision framework: useState for local UI state, Context for shared client state, TanStack Query for server state, React Router for navigation."
+sidebar:
+  order: 25
+difficulty: intermediate
+readingTime: 25
+tags: [react, state, architecture]
+---
+
+The last three lessons introduced three state tools. This one is about choosing between them, because the most common state bug is not a wrong value. It is the right value in the wrong place.
+
+## Four kinds of state
+
+**Local UI state.** Owned by one component, short-lived, gone on unmount. A search term, a checkbox, an open menu.
+
+**Shared client state.** Shared across components, UI-related, not from a server. A theme, a selected campus building, a sidebar collapse.
+
+**Server state.** From an API, changes independently of your UI, needs fetching and caching. The spots list, a spot's details.
+
+**Routing state.** The current URL and its parameters. Which page, which id.
+
+## The mapping
+
+| State | Tool |
+| --- | --- |
+| Local UI | `useState` |
+| Shared client | Context |
+| Server | TanStack Query |
+| Navigation | React Router |
+
+## Apply it to Campus Eats
+
+| Value | Kind | Tool |
+| --- | --- | --- |
+| `searchTerm` | Local UI | `useState` in `Filters` |
+| `selectedCategories` | Local UI | `useState` in `Filters` |
+| `openNowOnly` | Local UI | `useState` in `Filters` |
+| `theme` | Shared client | Context |
+| `spots` | Server | TanStack Query |
+| `spotId` | Routing | `useParams` |
+
+The filter state is local because only `Filters` needs it, and `DirectoryPage` reads the derived `visible` list, not the criteria. The moment two components need the criteria, it lifts, as in [Lesson 13](/sdev-2150-intermediate-frontend/course-lessons/13-lifting-state-and-conditional-rendering/).
+
+## Four questions
+
+1. Does this data come from an API? Use TanStack Query.
+2. Is this shared UI state? Use Context.
+3. Is this local to a component? Use `useState`.
+4. Is this part of navigation? Use React Router.
+
+In that order. Most state is local, and local state is the cheapest kind.
+
+## Common mistakes
+
+**Storing server data in Context.** The list goes in a context value, and now it is a stale copy with no cache, no background updates and no invalidation. Fetch it with a query and let the library own the lifecycle.
+
+**Overusing Context.** A context for one value used in one component is an extra file and a re-render for nothing. Lift state first, and use Context when lifting is not enough.
+
+**Duplicating server state locally.** A component fetches a list, stores it in `useState`, and now there are two copies of the truth. The server's copy and yours, and they drift.
+
+**Mixing patterns.** A route loader for one page and `useQuery` for another. Pick one approach per data source, and be consistent.
+
+## The rule in one sentence
+
+Ask where the data comes from and who needs it, and let the answer pick the tool.
+
+
+
+## Practice
+
+
+1. Classify `selectedId`, the currently edited spot on the admin page.
+2. Classify a list of campuses that is fetched once at startup and never changes.
+3. Explain why a filter criteria object is not server state even though it filters server data.
+4. Describe the bug that results from storing `spots` in both a query cache and a `useState`.
+
+<details>
+<summary>Answers</summary>
+
+1. Routing state, once it is in the URL as `:spotId`. Local UI state before that.
+2. Server state, fetched with a query and cached with a long `staleTime`.
+3. The criteria are the user's input, not the server's data. The server data is the list, which is separate.
+4. The two copies drift after a mutation, and the UI shows whichever one updated last.
+
+</details>

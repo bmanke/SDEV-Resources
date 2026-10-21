@@ -1,0 +1,158 @@
+---
+title: "7. Introduction to React"
+description: "Rebuilding the Campus Eats UI with React and Tailwind. What a component is, what props are, and what React takes over that you were doing by hand."
+sidebar:
+  order: 7
+difficulty: beginner
+readingTime: 40
+tags: [react, vite, tailwind, jsx]
+---
+
+Everything from Lessons 1 to 4 was you doing React's job by hand. You built HTML strings, you queried the DOM, you emitted events, you re-rendered on change. React does the last three and leaves the first one as a function you write.
+
+This lesson rebuilds Campus Eats in React with Tailwind for styling. The vanilla version stays useful as the thing React is replacing.
+
+## Set up the project
+
+```sh
+npm create vite@latest campus-eats -- --template react
+cd campus-eats
+npm install
+npm run dev
+```
+
+Add Tailwind with the Vite plugin.
+
+```sh
+npm install tailwindcss @tailwindcss/vite
+```
+
+```js
+// vite.config.mjs
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+});
+```
+
+```css
+/* src/index.css */
+@import 'tailwindcss';
+```
+
+## What a component is
+
+A React component is a function that returns markup.
+
+```jsx
+function Header({ tagline }) {
+  return (
+    <header className="border-b bg-white px-6 py-4">
+      <h1 className="text-lg font-bold">Campus Eats</h1>
+      <small className="opacity-60">{tagline}</small>
+    </header>
+  );
+}
+```
+
+That is JSX. It looks like HTML, it is JavaScript, and the `className` prop is the HTML `class` attribute renamed because `class` is a reserved word in JavaScript.
+
+Use it like an element.
+
+```jsx
+<Header tagline="Find something to eat between classes" />
+```
+
+Compare with the Web Component from Lesson 2. Same idea, one function instead of a class with a lifecycle.
+
+## Props are function arguments
+
+The component above takes `tagline` as a prop. Props are read-only. A component does not change its own props.
+
+```jsx
+function SpotCard({ name, building, price }) {
+  return (
+    <div className="rounded border bg-white p-4">
+      <h3 className="font-semibold">{name}</h3>
+      <p className="text-xs opacity-60">{building}</p>
+      <p className="text-xs">${price}</p>
+    </div>
+  );
+}
+```
+
+## Render a list
+
+```jsx
+const spots = [
+  { id: 'tandoor', name: 'Tandoor Hut', building: 'X-Wing, main floor', price: 12 },
+  { id: 'noodlebar', name: 'Noodle Bar', building: 'Student Commons', price: 11 },
+];
+
+function Results() {
+  return (
+    <ul className="divide-y">
+      {spots.map((spot) => (
+        <SpotCard key={spot.id} {...spot} />
+      ))}
+    </ul>
+  );
+}
+```
+
+`key` is how React matches an element to its data between renders. Use a stable id, not the array index.
+
+## Mount the app
+
+```jsx
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import './index.css';
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
+```
+
+## What React took over
+
+| Vanilla, Lessons 1 to 4 | React |
+| --- | --- |
+| Build an HTML string with template literals | Return JSX from a function |
+| `querySelector` and manual DOM updates | React updates the DOM |
+| Dispatch a custom event | Call a state setter |
+| Re-render on every change | React re-runs the function |
+| `addEventListener` | Pass a function as a prop |
+
+The hard part in the vanilla version was keeping the DOM in sync. In React that is the framework's job.
+
+## Layout with Tailwind
+
+Tailwind is a set of small CSS classes you compose. `border-b bg-white px-6 py-4` is one bottom border, a white background, horizontal padding of 1.5rem and vertical padding of 1rem. You write classes, not a stylesheet, and the utility classes map to a consistent spacing and colour scale.
+
+The full Campus Eats layout in Tailwind is in [Lesson 10](/sdev-2150-intermediate-frontend/course-lessons/10-responsive-layout-with-tailwind/).
+
+
+
+## Practice
+
+
+1. Convert the `Details` section from Lesson 4 into a React component that takes a `spot` prop.
+2. Render the spots list with `map` and add an "Open now" badge for spots where `openNow` is true.
+3. Add a `PageLayout` component that takes `header`, `left` and `middle` props and renders them in a grid.
+4. Explain in one sentence why `key` must not be the array index when the list can be reordered.
+
+<details>
+<summary>Answers</summary>
+
+1. A function component with `spot` in the parameter list, returning JSX for the name, category, building and price.
+2. `{spot.openNow && <span className="badge">Open now</span>}` inside the card.
+3. A grid container with named props, each rendering its prop.
+4. React matches elements by key, so an index-based key makes React reuse the wrong DOM node when the order changes.
+
+</details>

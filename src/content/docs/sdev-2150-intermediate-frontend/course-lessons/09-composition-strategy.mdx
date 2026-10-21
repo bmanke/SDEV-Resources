@@ -1,0 +1,144 @@
+---
+title: "9. Composition Strategy"
+description: "Container and presentational components, a reusable Card primitive, and composing the page from small pieces with a PageLayout."
+sidebar:
+  order: 9
+difficulty: intermediate
+readingTime: 35
+tags: [react, composition, architecture]
+---
+
+Lesson 8 composed at the level of a list item. This lesson zooms out and applies the same idea to the page, with one distinction that makes the structure readable: containers coordinate, presentational components render.
+
+The distinction is a guideline, not a rule. React hooks blurred it years ago, and a modern component often does both. It is still the clearest way to decide what a component is responsible for.
+
+## Two kinds of component
+
+**Presentational components** describe how things look. They receive data through props, they do not know where data comes from, and they have no side effects.
+
+Examples: `SpotItem`, the `Filters` markup, the `Details` display.
+
+**Container components** describe how things are assembled. They import or fetch data, they decide which children render, and they pass props down.
+
+Examples: `Results`, `App`.
+
+A useful test: could you replace the data source of this component without changing its markup? If yes, it is presentational.
+
+## Extract a `Card` primitive
+
+Three regions of Campus Eats, Filters, Results and Details, share the same shape: a title, a count badge and a body. Extract it.
+
+```jsx
+export default function Card({ title, count, children }) {
+  return (
+    <section className="h-full rounded-box border border-base-200 bg-base-100 shadow-sm">
+      <header className="flex items-center justify-between border-b border-base-200 px-4 py-3">
+        <h2 className="text-sm font-bold">{title}</h2>
+        {count != null && <span className="badge badge-sm badge-neutral">{count}</span>}
+      </header>
+      <div>{children}</div>
+    </section>
+  );
+}
+```
+
+One component owns the border, the background and the header. Every change to the card's appearance happens here.
+
+## Use `Card` everywhere
+
+```jsx
+import Card from './ui/Card';
+import SpotItem from './SpotItem';
+
+export default function Results({ spots }) {
+  return (
+    <Card title="Results" count={spots.length}>
+      <ul className="divide-y divide-base-200">
+        {spots.map((spot) => (
+          <SpotItem key={spot.id} {...spot} />
+        ))}
+      </ul>
+    </Card>
+  );
+}
+```
+
+```jsx
+import Card from './ui/Card';
+
+export default function Details({ spot }) {
+  if (!spot) return null;
+  return (
+    <Card title="Details">
+      <div className="p-4 text-sm">
+        <h3 className="font-semibold">{spot.name}</h3>
+        <p className="mt-1 opacity-70">{spot.category} | {spot.building}</p>
+      </div>
+    </Card>
+  );
+}
+```
+
+## Compose the page
+
+`App` is a container. It should not own layout details.
+
+```jsx
+export default function PageLayout({ header, left, middle, right }) {
+  return (
+    <div className="min-h-screen bg-base-200">
+      <header className="border-b border-base-300 bg-base-100 px-6 py-4">{header}</header>
+      <main className="mx-auto grid max-w-7xl grid-cols-1 gap-4 p-6 md:grid-cols-3">
+        <aside className="space-y-4">{left}</aside>
+        <section className="space-y-4 md:col-span-2">{middle}</section>
+        <section className="md:col-span-3">{right}</section>
+      </main>
+    </div>
+  );
+}
+```
+
+```jsx
+import Header from './components/layout/Header';
+import PageLayout from './components/layout/PageLayout';
+
+export default function App() {
+  return (
+    <PageLayout
+      header={<Header tagline="Find something to eat between classes" />}
+      left={<Filters />}
+      middle={<Results />}
+      right={<Details />}
+    />
+  );
+}
+```
+
+`App` reads as a description of the page: a header, a left column, a main region, a bottom region. The grid, the widths and the responsive breakpoints live in `PageLayout`.
+
+## Why this is worth the indirection
+
+- Markup is not duplicated. The card style is written once.
+- A region can be rewritten without touching the others.
+- The page structure is a list of names, not a stream of JSX.
+- Testing is easier. A presentational component is a function from props to markup.
+
+
+
+## Practice
+
+
+1. Add a `Card` variant with an optional `action` prop rendered on the right of the header.
+2. Extract a `PageLayout` region into its own component and describe why that helps or hurts readability.
+3. Mark each of `Card`, `SpotItem`, `Results` and `App` as container or presentational, and justify the two you found hardest.
+4. Add a `count` prop to `Results` and pass `visible.length` instead of `spots.length`, then explain when that is wrong.
+
+<details>
+<summary>Answers</summary>
+
+1. `{action && <div>{action}</div>}` in the header.
+2. It helps when the region has its own data or state. It hurts when it is only markup moved to another file.
+3. `Card` and `SpotItem` are presentational. `Results` and `App` are containers, because they import data and decide what renders.
+4. It is wrong when the caller can pass a count that disagrees with the list, creating two sources of truth.
+
+</details>

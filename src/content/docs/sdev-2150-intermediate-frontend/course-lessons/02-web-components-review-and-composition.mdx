@@ -1,0 +1,158 @@
+---
+title: "2. Web Components Review and Composition"
+description: "A review of custom elements, Shadow DOM and templates, then the composition moment: carving one HTML page into reusable components."
+sidebar:
+  order: 2
+difficulty: beginner
+readingTime: 30
+tags: [web-components, composition]
+---
+
+This lesson starts where SDEV-1150 left off. Web Components are the browser-native way to make a reusable element, and they are worth knowing for two reasons. First, you can use them today without a framework. Second, React is one answer to the same problem, so understanding the native version makes the framework version easier to judge.
+
+## Review: custom elements, Shadow DOM, templates
+
+A custom element is a JavaScript class that extends `HTMLElement`, registered with `customElements.define`.
+
+```js
+class SpotCard extends HTMLElement {
+  connectedCallback() {
+    const name = this.getAttribute('name') ?? 'Unknown spot';
+    this.innerHTML = `
+      <div class="card">
+        <h3>${name}</h3>
+        <p>${this.getAttribute('building') ?? ''}</p>
+      </div>
+    `;
+  }
+}
+
+customElements.define('spot-card', SpotCard);
+```
+
+Once registered, the browser treats `<spot-card>` like any other element.
+
+```html
+<spot-card name="Tandoor Hut" building="X-Wing, main floor"></spot-card>
+```
+
+Three APIs make this work:
+
+- `customElements.define` maps a tag name to a class. The tag must contain a hyphen.
+- **Shadow DOM** attaches a private DOM subtree with `attachShadow({ mode: 'open' })`. Styles inside it do not leak out, and styles outside do not leak in.
+- The `<template>` element holds inert HTML you clone with `content.cloneNode(true)`.
+
+```js
+class ShadowSpot extends HTMLElement {
+  connectedCallback() {
+    const shadow = this.attachShadow({ mode: 'open' });
+    shadow.innerHTML = `
+      <style>
+        :host { display: block; border: 1px solid #ddd; padding: 1rem; }
+        h3 { margin: 0 0 0.25rem; }
+      </style>
+      <h3>${this.getAttribute('name')}</h3>
+      <slot></slot>
+    `;
+  }
+}
+```
+
+The `<slot>` element is where light DOM children from the custom element appear. It is the native version of React's `children` prop, which you will meet in [Lesson 8](/sdev-2150-intermediate-frontend/course-lessons/08-props-children-and-slots/).
+
+If any of this is unfamiliar, [Web Components: Templates and Shadow DOM](/lessons/frontend-development/10-web-components-templates-and-shadow-dom/) covers it in depth.
+
+## The composition moment
+
+Web Components solve reusability. Composition solves structure. The moment comes when a page stops being one long HTML file and becomes a set of named regions.
+
+Start with a page like this:
+
+```html
+<body>
+  <header>
+    <h1>Campus Eats</h1>
+    <p>Find something to eat between classes</p>
+  </header>
+  <main>
+    <aside>
+      <input type="search" placeholder="Search spots..." />
+      <button>Hot lunch</button>
+      <button>Coffee</button>
+    </aside>
+    <section>
+      <h2>Results</h2>
+      <ul>
+        <li>Tandoor Hut</li>
+        <li>Noodle Bar</li>
+      </ul>
+    </section>
+    <section>
+      <h2>Details</h2>
+      <p>Tandoor Hut | X-Wing, main floor | $12</p>
+    </section>
+  </main>
+</body>
+```
+
+Nothing here is wrong. It is one page with three regions. But every region is a thing you will want to reuse, replace or restyle on its own, and one file cannot give you that.
+
+Carve it into components.
+
+```html
+<body>
+  <campus-header tagline="Find something to eat between classes"></campus-header>
+  <main>
+    <spot-filters></spot-filters>
+    <spot-results></spot-results>
+    <spot-details></spot-details>
+  </main>
+</body>
+```
+
+Each element owns one region:
+
+```js
+class CampusHeader extends HTMLElement {
+  connectedCallback() {
+    this.innerHTML = `
+      <header class="border-b bg-white px-6 py-4">
+        <h1>Campus Eats</h1>
+        <small>${this.getAttribute('tagline') ?? ''}</small>
+      </header>
+    `;
+  }
+}
+customElements.define('campus-header', CampusHeader);
+```
+
+The page is now a list of names that describe its structure. That is composition. It is the same move you will make in React with `PageLayout` in [Lesson 9](/sdev-2150-intermediate-frontend/course-lessons/09-composition-strategy/), and the same reason the React version is worth the framework.
+
+## What composition buys you
+
+- The page reads as a list of regions, not a stream of markup.
+- A region can be rewritten without touching the others.
+- The same region can appear on two pages.
+- A team can own a region without stepping on each other.
+
+None of that requires Web Components or React. It requires deciding that a page is a set of named pieces.
+
+
+
+## Practice
+
+
+1. Convert the `Results` section into a custom element that renders the two spots from a hard-coded array.
+2. Give the custom element a `count` attribute that renders the number of spots in a badge.
+3. Add a `<slot>` to the results item so a parent can pass in an "Open now" badge.
+4. Explain in one sentence why a custom element tag name must contain a hyphen.
+
+<details>
+<summary>Answers</summary>
+
+1. Define a class that extends `HTMLElement`, build the list with `map`, and set `innerHTML` in `connectedCallback`.
+2. `this.getAttribute('count')` then render a `<span class="badge">` beside the heading.
+3. Add `<slot name="badge"></slot>` in the shadow DOM, and in light DOM pass `<span slot="badge">Open now</span>`.
+4. The hyphen namespace keeps custom elements from colliding with current or future built-in elements.
+
+</details>

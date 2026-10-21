@@ -1,0 +1,165 @@
+---
+title: "5. A Backend for Campus Eats"
+description: "A small Express API with full CRUD over a spots.json file, running on localhost:3000, that the frontend will consume from Lesson 16 onward."
+sidebar:
+  order: 5
+difficulty: beginner
+readingTime: 35
+tags: [express, rest, api, node]
+---
+
+The frontend needs data that is not hard-coded. This lesson builds the backend it will talk to from [Lesson 16](/sdev-2150-intermediate-frontend/course-lessons/16-useeffect-and-fetching-data/) onward: an Express server with create, read, update and delete over a JSON file.
+
+You do not need the backend running until Lesson 16, but building it now means the data layer is not a mystery later.
+
+## Create the project
+
+```sh
+mkdir campus-eats-api
+cd campus-eats-api
+npm init -y
+npm install express cors
+```
+
+Create `server.js` and a `spots.json` next to it. Set `"type": "module"` in `package.json` so you can use `import`.
+
+## The data
+
+```json
+[
+  { "id": "tandoor", "name": "Tandoor Hut", "category": "Hot lunch", "building": "X-Wing, main floor", "price": 12, "rating": 4.6, "openNow": true },
+  { "id": "noodlebar", "name": "Noodle Bar", "category": "Hot lunch", "building": "Student Commons", "price": 11, "rating": 4.2, "openNow": true },
+  { "id": "coffeecart", "name": "Bridge Coffee Cart", "category": "Coffee", "building": "Skybridge", "price": 4, "rating": 4.8, "openNow": false },
+  { "id": "greens", "name": "Greens and Grains", "category": "Salads", "building": "Y-Wing, level 2", "price": 10, "rating": 3.9, "openNow": true },
+  { "id": "bakery", "name": "Sunrise Bakery", "category": "Bakery", "building": "Student Commons", "price": 6, "rating": 4.4, "openNow": false }
+]
+```
+
+## The server
+
+```js
+import express from 'express';
+import fs from 'node:fs';
+import cors from 'cors';
+
+const app = express();
+const DATA_FILE = new URL('./spots.json', import.meta.url);
+
+app.use(cors());
+app.use(express.json());
+
+function readSpots() {
+  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+}
+
+function writeSpots(spots) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(spots, null, 2));
+}
+```
+
+`express.json()` parses request bodies so `req.body` is an object. `cors()` lets the Vite dev server on a different port call this one.
+
+### Read
+
+```js
+app.get('/spots', (req, res) => {
+  res.json(readSpots());
+});
+
+app.get('/spots/:id', (req, res) => {
+  const spot = readSpots().find((s) => s.id === req.params.id);
+  if (!spot) return res.status(404).json({ error: 'Spot not found' });
+  res.json(spot);
+});
+```
+
+### Create
+
+```js
+app.post('/spots', (req, res) => {
+  const spots = readSpots();
+  const spot = { id: crypto.randomUUID().slice(0, 8), ...req.body };
+  spots.push(spot);
+  writeSpots(spots);
+  res.status(201).json(spot);
+});
+```
+
+The server assigns the `id`. The client never invents one.
+
+### Update
+
+```js
+app.put('/spots/:id', (req, res) => {
+  const spots = readSpots();
+  const index = spots.findIndex((s) => s.id === req.params.id);
+  if (index === -1) return res.status(404).json({ error: 'Spot not found' });
+  spots[index] = { ...spots[index], ...req.body };
+  writeSpots(spots);
+  res.json(spots[index]);
+});
+```
+
+### Delete
+
+```js
+app.delete('/spots/:id', (req, res) => {
+  let spots = readSpots();
+  if (!spots.some((s) => s.id === req.params.id)) {
+    return res.status(404).json({ error: 'Spot not found' });
+  }
+  spots = spots.filter((s) => s.id !== req.params.id);
+  writeSpots(spots);
+  res.status(204).end();
+});
+```
+
+### Listen
+
+```js
+app.listen(3000, () => {
+  console.log('Campus Eats API on http://localhost:3000');
+});
+```
+
+## Run it
+
+```sh
+node server.js
+```
+
+Try each route with `curl`.
+
+```sh
+curl http://localhost:3000/spots
+curl http://localhost:3000/spots/tandoor
+curl -X POST -H 'Content-Type: application/json' \
+  -d '{"name":"Test Cart","category":"Coffee","building":"Z-Wing","price":5,"rating":4,"openNow":true}' \
+  http://localhost:3000/spots
+```
+
+A `204` response has no body. That is correct, not a bug.
+
+## What you have
+
+Five routes over one file. It is not a database and it is not production-ready, but it is a real API with real state, and every fetch call in the rest of the course will talk to it.
+
+
+
+## Practice
+
+
+1. Add a `GET /categories` route that returns the distinct categories from the data.
+2. Add a `GET /spots?category=Coffee` query parameter so the server filters instead of the client.
+3. Add a `PATCH /spots/:id` route that updates only the fields in the body.
+4. Explain why the server assigns the `id` rather than trusting the client.
+
+<details>
+<summary>Answers</summary>
+
+1. `` [...new Set(spots.map((s) => s.category))] ``.
+2. `req.query.category` then filter before responding.
+3. Same spread pattern as PUT, without requiring the full object.
+4. The server is the source of truth for identity. A client that invents ids can collide or send unsafe values.
+
+</details>

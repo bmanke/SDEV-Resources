@@ -1,0 +1,144 @@
+---
+title: "23. Shared State with Context"
+description: "Prop drilling and the Context API: sharing a theme, or any client state, across the component tree without passing it through every level."
+sidebar:
+  order: 23
+difficulty: intermediate
+readingTime: 35
+tags: [react, context, state, theming]
+---
+
+Some state belongs to one component. Some state belongs to the whole application. The theme is the second kind, and passing it through every level is a problem with a name: prop drilling.
+
+## The problem
+
+```text
+App -> Layout -> Sidebar -> ThemeToggle
+```
+
+If only `ThemeToggle` needs the theme, `Layout` and `Sidebar` still receive it and pass it on. Every intermediate component grows a prop it does not use.
+
+```jsx
+function App() {
+  const [theme, setTheme] = useState('light');
+  return <Layout theme={theme} onToggle={() => setTheme('dark')} />;
+}
+
+function Layout({ theme, onToggle }) {
+  return <Sidebar theme={theme} onToggle={onToggle} />;
+}
+
+function Sidebar({ theme, onToggle }) {
+  return <ThemeToggle theme={theme} onToggle={onToggle} />;
+}
+```
+
+It works. It scales badly.
+
+## Context
+
+Context is a way to make a value available to any component in a subtree, without a prop at every level.
+
+```jsx
+import { createContext } from 'react';
+
+export const ThemeContext = createContext();
+```
+
+## A provider
+
+```jsx
+import { useState } from 'react';
+import { ThemeContext } from './ThemeContext';
+
+export function ThemeProvider({ children }) {
+  const [theme, setTheme] = useState('light');
+
+  function toggleTheme() {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  }
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+```
+
+## Wrap the application
+
+```jsx
+import { ThemeProvider } from './context/ThemeProvider';
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <ThemeProvider>
+      <RouterProvider router={router} />
+    </ThemeProvider>
+  </StrictMode>
+);
+```
+
+## Consume it
+
+```jsx
+import { useContext } from 'react';
+import { ThemeContext } from '../context/ThemeContext';
+
+export default function ThemeToggle() {
+  const { theme, toggleTheme } = useContext(ThemeContext);
+
+  return (
+    <button className="btn btn-ghost btn-sm" onClick={toggleTheme}>
+      Theme: {theme}
+    </button>
+  );
+}
+```
+
+Two components. No intermediate props.
+
+## Make the theme do something
+
+DaisyUI themes are switched with a `data-theme` attribute on `<html>`.
+
+```jsx
+useEffect(() => {
+  document.documentElement.dataset.theme = theme;
+}, [theme]);
+```
+
+```css
+@plugin 'daisyui' {
+  themes: light --default, dark --prefersdark;
+}
+```
+
+Toggle the button and every `bg-base-100`, `text-base-content` and `btn-primary` in the app changes colour.
+
+## When not to use Context
+
+Context is for state that is read often and changes rarely. A theme qualifies. A high-frequency value does not, because every consumer re-renders on every change.
+
+Context is not for server data. A fetched list in Context is a stale copy with no caching, no background updates and no invalidation. That is [TanStack Query](/sdev-2150-intermediate-frontend/course-lessons/24-server-state-with-tanstack-query/)'s job.
+
+
+
+## Practice
+
+
+1. Add a `theme` value to `localStorage` so the theme survives a reload.
+2. Add a second context for the currently selected campus building.
+3. Explain why putting the spots list in Context is a mistake.
+4. Replace `useContext` with the `use` hook, available in React 19, and describe the difference.
+
+<details>
+<summary>Answers</summary>
+
+1. `useEffect` reads the stored value on mount and writes on change.
+2. A second `createContext`, provider and consumer, following the same pattern.
+3. It duplicates server data, has no cache or invalidation, and re-renders every consumer on every fetch.
+4. `use` works in conditionals and loops, which `useContext` does not, because it is not a hook.
+
+</details>

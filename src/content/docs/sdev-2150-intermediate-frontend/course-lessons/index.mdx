@@ -1,0 +1,58 @@
+---
+title: "Course Lessons"
+description: "The SDEV-2150 lesson set: from vanilla JavaScript and Web Components through React, routing, data, state and testing, built around one Campus Eats project."
+sidebar:
+  label: Overview
+  order: 0
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="About these lessons">
+These lessons cover the SDEV-2150 Intermediate Frontend Development course. They are written for this site, in their own words, and follow the same topic order as the course. The running project is **Campus Eats**, a directory of campus food spots, first built with Web Components and then rebuilt in React.
+</Aside>
+
+Every lesson adds one piece to **Campus Eats**, a directory of campus food spots with a search, category filters, a results list and a details card, backed by a small Express API. The project starts as a single vanilla HTML page, becomes a set of Web Components, then is rebuilt in React with Tailwind and DaisyUI. Routing, data loading, shared state and tests are added one lesson at a time.
+
+## Lesson map
+
+| # | Lesson | What it covers |
+| - | --- | --- |
+| 1 | [JavaScript review](/sdev-2150-intermediate-frontend/course-lessons/01-javascript-review/) | Syntax, template literals, arrays, DOM and events with a Vite starter |
+| 2 | [Web Components review and composition](/sdev-2150-intermediate-frontend/course-lessons/02-web-components-review-and-composition/) | Custom elements, Shadow DOM, templates, then carving a page into components |
+| 3 | [The reactive pattern with events](/sdev-2150-intermediate-frontend/course-lessons/03-reactive-pattern-with-events/) | A user action, a custom event, and a component that reacts |
+| 4 | [Event-driven reactive UI](/sdev-2150-intermediate-frontend/course-lessons/04-event-driven-reactive-ui/) | Selection and filtering reactivity with Web Components |
+| 5 | [A backend for Campus Eats](/sdev-2150-intermediate-frontend/course-lessons/05-a-backend-for-campus-eats/) | An Express CRUD API serving `spots.json` |
+| 6 | [Component and async programming exercises](/sdev-2150-intermediate-frontend/course-lessons/06-component-and-async-programming-exercises/) | Promises, `async` and `await`, `fetch`, and custom events |
+| 7 | [Introduction to React](/sdev-2150-intermediate-frontend/course-lessons/07-introduction-to-react/) | Rebuilding Campus Eats with React and Tailwind |
+| 8 | [Props, children and slots](/sdev-2150-intermediate-frontend/course-lessons/08-props-children-and-slots/) | Passing data in, rendering `children`, and a `SpotItem` sub-component |
+| 9 | [Composition strategy](/sdev-2150-intermediate-frontend/course-lessons/09-composition-strategy/) | Container and presentational components, and a `Card` primitive |
+| 10 | [Responsive layout with Tailwind](/sdev-2150-intermediate-frontend/course-lessons/10-responsive-layout-with-tailwind/) | Breakpoints, grids and columns |
+| 11 | [DaisyUI components](/sdev-2150-intermediate-frontend/course-lessons/11-daisyui-components/) | A component library on top of Tailwind |
+| 12 | [Events and state with useState](/sdev-2150-intermediate-frontend/course-lessons/12-events-and-state-with-usestate/) | Controlled inputs, multi-select buttons and checkboxes |
+| 13 | [Lifting state and conditional rendering](/sdev-2150-intermediate-frontend/course-lessons/13-lifting-state-and-conditional-rendering/) | Moving state up, and forms with validation |
+| 15 | [Custom hooks and sessionStorage](/sdev-2150-intermediate-frontend/course-lessons/15-custom-hooks-and-sessionstorage/) | Extracting logic into a hook, and persisting state |
+| 16 | [useEffect and fetching data](/sdev-2150-intermediate-frontend/course-lessons/16-useeffect-and-fetching-data/) | Loading spots from the Express API |
+| 17 | [Static routing with React Router](/sdev-2150-intermediate-frontend/course-lessons/17-static-routing-with-react-router/) | `BrowserRouter`, `Routes` and `Route` |
+| 18 | [Dynamic routes](/sdev-2150-intermediate-frontend/course-lessons/18-dynamic-routes/) | Route parameters with `:id` |
+| 19 | [React Router data mode](/sdev-2150-intermediate-frontend/course-lessons/19-react-router-data-mode/) | Loaders, actions and router-aware forms |
+| 21 | [Client-side rendering](/sdev-2150-intermediate-frontend/course-lessons/21-client-side-rendering/) | How a CSR app turns a URL into a visible UI |
+| 22 | [Server-side rendering](/sdev-2150-intermediate-frontend/course-lessons/22-server-side-rendering/) | A small Node demo, CSR versus SSR, and hydration |
+| 23 | [Shared state with Context](/sdev-2150-intermediate-frontend/course-lessons/23-shared-state-with-context/) | Prop drilling and the Context API |
+| 24 | [Server state with TanStack Query](/sdev-2150-intermediate-frontend/course-lessons/24-server-state-with-tanstack-query/) | Caching, background updates, loading and error states |
+| 25 | [Choosing a state tool](/sdev-2150-intermediate-frontend/course-lessons/25-choosing-a-state-tool/) | `useState` versus Context versus TanStack Query |
+| 27 | [Unit testing](/sdev-2150-intermediate-frontend/course-lessons/27-unit-testing/) | Vitest and React Testing Library |
+
+The course numbers have gaps (there is no 14, 20, 26, 28, 29 or 30) because those weeks are used for assignments, review and work time. The lessons here keep the course's numbering so you can match them to your own workbook.
+
+## Versions
+
+These lessons were checked in October 2026 with these package versions:
+
+- React 19.2.8
+- Vite 8.3.5
+- Tailwind CSS 4.3.3 with `@tailwindcss/vite`
+- DaisyUI 5.7.50
+- React Router 8.5.0
+- TanStack Query 5.104.5
+- Vitest 5.0.5

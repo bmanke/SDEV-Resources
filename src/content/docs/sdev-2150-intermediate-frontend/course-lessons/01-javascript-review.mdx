@@ -1,0 +1,141 @@
+---
+title: "1. JavaScript Review"
+description: "A refresher on the JavaScript that SDEV-2150 builds on: syntax, template literals, arrays and objects, DOM manipulation and events, in a Vite starter."
+sidebar:
+  order: 1
+difficulty: beginner
+readingTime: 25
+tags: [javascript, dom, vite]
+---
+
+SDEV-2150 starts with a working knowledge of JavaScript, not a from-zero introduction. This lesson rebuilds the pieces you will use every week: variables, functions, arrays and objects, building HTML strings from data, creating DOM elements, and wiring buttons to functions. By the end you will have a small Vite page that runs all of it.
+
+If any of this feels new, [Frontend Development](/lessons/frontend-development/) covers the same topics in more depth, one lesson per idea.
+
+## Set up a Vite starter
+
+Create a project and start the dev server:
+
+```sh
+npm create vite@latest campus-eats-review -- --template vanilla
+cd campus-eats-review
+npm install
+npm run dev
+```
+
+Open the URL the terminal prints. Vite serves the page and reloads it whenever a file changes, which is the workflow you will use for the rest of the course.
+
+## Syntax you will use every day
+
+### Variables and template literals
+
+`const` declares a value that will not be reassigned. `let` declares one that might be. Use `const` by default and switch to `let` only when you have a reason.
+
+```js
+const course = 'SDEV-2150';
+let topic = 'JavaScript review';
+
+output.innerHTML = `<p>Course: ${course} | Topic: ${topic}</p>`;
+```
+
+A template literal is a backtick string. `` `${...}` `` inside it runs JavaScript and inserts the result. You will use these constantly, because rendering a list of items is mostly building a string with data in it.
+
+### Functions
+
+Both of these are functions. The arrow form is shorter and is what you will mostly write in React.
+
+```js
+function add(a, b) {
+  return a + b;
+}
+
+const formatPrice = (label, value) => `${label}: $${value}`;
+```
+
+### Arrays, objects and iteration
+
+```js
+const spots = [
+  { name: 'Tandoor Hut', category: 'Hot lunch', price: 12, openNow: true },
+  { name: 'Noodle Bar', category: 'Hot lunch', price: 11, openNow: true },
+  { name: 'Bridge Coffee Cart', category: 'Coffee', price: 4, openNow: false },
+];
+
+let openCount = 0;
+for (const spot of spots) {
+  if (spot.openNow) openCount++;
+}
+
+output.textContent = `Open right now: ${openCount} of ${spots.length}`;
+```
+
+`for...of` walks an array in order. `filter`, `map` and `find` do the same job with less code, and you will use them in nearly every lesson from here on.
+
+```js
+const open = spots.filter((s) => s.openNow);
+const names = spots.map((s) => s.name);
+const coffee = spots.find((s) => s.category === 'Coffee');
+```
+
+## Build a string from data
+
+Rendering a list is a function from data to HTML. Write it once, call it whenever the data changes.
+
+```js
+function renderSpotList(items) {
+  let html = '<ul>';
+  for (const spot of items) {
+    const status = spot.openNow ? 'open' : 'closed';
+    html += `<li class="${status}">${spot.name} - $${spot.price}</li>`;
+  }
+  html += '</ul>';
+  return html;
+}
+
+list.innerHTML = renderSpotList(spots);
+```
+
+## Create and append elements
+
+`innerHTML` is a quick way to replace a region of the page. `createElement` and `appendChild` build one node at a time, which matters when you want to keep a reference to a node or attach an event to it.
+
+```js
+function addMessage(message) {
+  const p = document.createElement('p');
+  p.textContent = message;
+  output.appendChild(p);
+}
+
+addMessage('This paragraph was created with createElement');
+```
+
+## Events
+
+A button is not useful until something listens to it.
+
+```js
+const clearBtn = document.querySelector('#clear');
+
+clearBtn.addEventListener('click', () => {
+  output.innerHTML = '';
+});
+```
+
+`addEventListener` takes an event name and a function to call when that event fires. The browser calls your function; you never call it yourself. That inversion, where you describe what should happen and the runtime calls it, is the same idea React formalizes with props and state.
+
+## Practice
+
+1. Add a `rating` property to each spot and render it in `renderSpotList`.
+2. Write `renderClosedOnly(spots)` that returns HTML for spots where `openNow` is false.
+3. Add a button that sorts the list by price before rendering it.
+4. Replace the `for...of` loop in `renderSpotList` with `map`, and join the results with an empty string.
+
+<details>
+<summary>Answers</summary>
+
+1. Inside the loop, add `` `${spot.rating}` `` next to the price.
+2. `spots.filter((s) => !s.openNow)` then pass the result to `renderSpotList`.
+3. `` [...spots].sort((a, b) => a.price - b.price) `` produces a new sorted array, leaving the original alone.
+4. `` items.map((spot) => `<li ...>${spot.name}</li>`).join('') ``.
+
+</details>

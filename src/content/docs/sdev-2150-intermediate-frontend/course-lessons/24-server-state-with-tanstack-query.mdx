@@ -1,0 +1,147 @@
+---
+title: "24. Server State with TanStack Query"
+description: "Caching, background updates, loading and error states for API data, replacing the manual fetching from Lesson 16."
+sidebar:
+  order: 24
+difficulty: advanced
+readingTime: 40
+tags: [react, tanstack-query, data, caching]
+---
+
+Lesson 23 used Context for shared client state. This lesson is about the other kind: server state, which comes from an API, changes independently of your UI, and needs to be fetched, cached and kept in sync.
+
+## The problem with manual fetching
+
+The `useEffect` approach from [Lesson 16](/sdev-2150-intermediate-frontend/course-lessons/16-useeffect-and-fetching-data/) leaves you writing:
+
+- loading state
+- error state
+- race condition handling
+- refetching after a mutation
+- de-duplicating requests from two components
+
+Each is a small amount of code. Together they are a data layer, and you are writing it by hand.
+
+## TanStack Query
+
+```sh
+npm install @tanstack/react-query
+```
+
+```jsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient();
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <RouterProvider router={router} />
+      </ThemeProvider>
+    </QueryClientProvider>
+  </StrictMode>
+);
+```
+
+## A query
+
+```jsx
+import { useQuery } from '@tanstack/react-query';
+
+function fetchSpots() {
+  return fetch('http://localhost:3000/spots').then((res) => {
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+    return res.json();
+  });
+}
+
+const { data, isLoading, isError, error } = useQuery({
+  queryKey: ['spots'],
+  queryFn: fetchSpots,
+});
+```
+
+- `queryKey` identifies the data. The same key in two components is one request.
+- `queryFn` fetches it.
+- `data` is the cached result, `undefined` while loading.
+- `isLoading` and `isError` replace two pieces of state you were managing by hand.
+
+## Render it
+
+```jsx
+if (isLoading) return <p>Loading spots...</p>;
+if (isError) return <p>Could not load spots: {error.message}</p>;
+
+return <Results spots={data} />;
+```
+
+## What you get for free
+
+- **Caching.** A second component using `['spots']` reads the cache.
+- **Background updates.** A stale query refetches on window focus by default.
+- **De-duplication.** Two components requesting the same key in the same tick share one fetch.
+- **Invalidation after a mutation.**
+
+```jsx
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+
+const queryClient = useQueryClient();
+
+const mutation = useMutation({
+  mutationFn: (spot) =>
+    fetch('http://localhost:3000/spots', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(spot),
+    }).then((res) => {
+      if (!res.ok) throw new Error('Could not save the spot');
+      return res.json();
+    }),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['spots'] });
+  },
+});
+```
+
+After a successful create, the list query is marked stale and refetches. That is the "keep the UI in sync with the server" problem, solved by a library instead of a `useEffect` that runs on every state change.
+
+## Replacing the loaders
+
+With TanStack Query in place, the route loaders from [Lesson 19](/sdev-2150-intermediate-frontend/course-lessons/19-react-router-data-mode/) become optional. The components can use `useQuery` directly, and the router goes back to routing.
+
+```jsx
+export const router = createBrowserRouter([
+  {
+    path: '/',
+    Component: App,
+    children: [
+      { index: true, Component: DirectoryPage },
+      { path: 'admin', Component: AdminPage },
+      { path: 'admin/:spotId', Component: AdminPage },
+    ],
+  },
+]);
+```
+
+That is a real architectural decision, not a simplification. Loaders fetch before render. `useQuery` fetches after. Which is right depends on whether the data is required for the first paint.
+
+
+
+## Practice
+
+
+1. Add a `staleTime` of 60 seconds and describe when a refetch happens.
+2. Add a `retry` option with a custom function.
+3. Add a `useQuery` for one spot by id, keyed on `['spots', spotId]`.
+4. Explain why `queryClient.invalidateQueries` is preferable to calling `setSpots` after a mutation.
+
+<details>
+<summary>Answers</summary>
+
+1. The query is considered fresh for 60 seconds, so a refetch happens only after that, or on invalidation.
+2. `retry: (failureCount, error) => error.status !== 404 && failureCount < 3`.
+3. `` queryKey: ['spots', spotId], queryFn: () => getJSON(`/spots/${spotId}`) ``.
+4. Invalidation lets the cache refetch, which keeps one source of truth instead of patching a copy.
+
+</details>

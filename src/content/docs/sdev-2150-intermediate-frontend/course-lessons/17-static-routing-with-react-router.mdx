@@ -1,0 +1,141 @@
+---
+title: "17. Static Routing with React Router"
+description: "BrowserRouter, Routes and Route: giving Campus Eats real URLs for the directory and admin pages."
+sidebar:
+  order: 17
+difficulty: intermediate
+readingTime: 35
+tags: [react, routing, react-router]
+---
+
+So far Campus Eats is one page. Real applications have URLs, and the URL should be the source of truth for what is on screen. React Router provides that.
+
+## Install
+
+```sh
+npm install react-router
+```
+
+## The router
+
+```jsx
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { RouterProvider } from 'react-router';
+import './index.css';
+import { router } from './router';
+import { ThemeProvider } from './context/ThemeProvider';
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <ThemeProvider>
+      <RouterProvider router={router} />
+    </ThemeProvider>
+  </StrictMode>
+);
+```
+
+## The route config
+
+```jsx
+import { createBrowserRouter } from 'react-router';
+import App from './App';
+import DirectoryPage from './pages/DirectoryPage';
+import AdminPage from './pages/AdminPage';
+
+export const router = createBrowserRouter([
+  {
+    path: '/',
+    Component: App,
+    children: [
+      { index: true, Component: DirectoryPage },
+      { path: 'admin', Component: AdminPage },
+    ],
+  },
+]);
+```
+
+`App` is the layout. `DirectoryPage` and `AdminPage` render inside it, wherever `App` puts its `<Outlet />`.
+
+```jsx
+import { Outlet, useLocation } from 'react-router';
+import Header from './components/layout/Header';
+import PageLayout from './components/layout/PageLayout';
+
+export default function App() {
+  const location = useLocation();
+  const isAdmin = location.pathname.startsWith('/admin');
+  const outlet = <Outlet />;
+
+  return (
+    <PageLayout
+      header={<Header tagline="Find something to eat between classes" />}
+      left={isAdmin ? null : outlet}
+      middle={isAdmin ? outlet : null}
+    />
+  );
+}
+```
+
+## Links
+
+```jsx
+import { NavLink } from 'react-router';
+
+<nav className="flex items-center gap-2">
+  <NavLink to="/" end className="btn btn-ghost btn-sm">Directory</NavLink>
+  <NavLink to="/admin" className="btn btn-ghost btn-sm">Admin</NavLink>
+</nav>
+```
+
+`NavLink` adds an `aria-current="page"` attribute to the active link, which is how the current tab gets its highlight. `end` makes the root route match only the exact path, not every path.
+
+## What changed
+
+Before routing, the admin page was a conditional render. Now it is a URL. That means:
+
+- The browser's back button works.
+- A link to `/admin` is a link you can share.
+- The page is bookmarkable.
+- A reload shows the same page, provided the server serves `index.html` for that path.
+
+Navigation happens in the browser. No full page load, no re-fetch of the JavaScript bundle.
+
+## The 404
+
+Add a catch-all.
+
+```jsx
+{ path: '*', Component: NotFoundPage }
+```
+
+```jsx
+export default function NotFoundPage() {
+  return (
+    <div className="p-8">
+      <h1 className="text-xl font-bold">Page not found</h1>
+      <p className="mt-2">That URL does not match a route.</p>
+    </div>
+  );
+}
+```
+
+
+
+## Practice
+
+
+1. Add an `/about` route and a link to it in the header.
+2. Add a `RouteErrorBoundary` component and attach it to each route.
+3. Explain why `end` is needed on the root `NavLink`.
+4. Describe what happens on a hard reload of `/admin` if the server only serves files that exist.
+
+<details>
+<summary>Answers</summary>
+
+1. One entry in the route config and one `NavLink`.
+2. Use the `ErrorBoundary` property on the route object.
+3. Without it, `/` matches as a prefix of every path, so every tab appears active.
+4. The server returns a 404 file, because there is no file at that path. A SPA fallback is needed.
+
+</details>

@@ -1,0 +1,119 @@
+---
+title: "8. Props, Children and Slots"
+description: "Passing data into components with props, passing content through with children, and extracting a SpotItem sub-component to remove repeated markup."
+sidebar:
+  order: 8
+difficulty: beginner
+readingTime: 30
+tags: [react, props, children, composition]
+---
+
+Lesson 7 introduced components and props. This lesson is about the two ways content gets into a component: props for data, and `children` for content.
+
+Props are named inputs. `children` is whatever you put between the component's opening and closing tags. Both are how a parent configures a child, and both are the React version of a Web Component's attributes and `<slot>`.
+
+## The problem: repeated markup
+
+A list of five spots has five copies of the same markup. Copy and paste once and you will do it again.
+
+```jsx
+<ul>
+  <li className="px-4 py-3">
+    <h3>Tandoor Hut</h3>
+    <p>X-Wing, main floor | $12</p>
+  </li>
+  <li className="px-4 py-3">
+    <h3>Noodle Bar</h3>
+    <p>Student Commons | $11</p>
+  </li>
+</ul>
+```
+
+## Extract a `SpotItem`
+
+```jsx
+export default function SpotItem({ name, category, building, price, rating, children }) {
+  return (
+    <li className="px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="text-sm font-semibold">{name}</h3>
+        <div className="flex items-center gap-2">
+          {children}
+          <small className="text-xs opacity-60">{category}</small>
+        </div>
+      </div>
+      <p className="mt-1 text-xs opacity-60">
+        {building} | ${price} | rating {rating}
+      </p>
+    </li>
+  );
+}
+```
+
+The data arrives as props. The `children` prop is a slot for optional content, rendered in a specific place.
+
+## Use it, with children
+
+```jsx
+import SpotItem from './SpotItem';
+
+const spots = [
+  { id: 'tandoor', name: 'Tandoor Hut', category: 'Hot lunch', building: 'X-Wing, main floor', price: 12, rating: 4.6, openNow: true },
+  { id: 'coffeecart', name: 'Bridge Coffee Cart', category: 'Coffee', building: 'Skybridge', price: 4, rating: 4.8, openNow: false },
+];
+
+function Results() {
+  return (
+    <ul className="divide-y divide-base-200">
+      {spots.map((spot) => (
+        <SpotItem key={spot.id} {...spot}>
+          {spot.openNow && <span className="badge badge-success badge-xs">Open now</span>}
+        </SpotItem>
+      ))}
+    </ul>
+  );
+}
+```
+
+Two things to notice:
+
+- `{...spot}` spreads the object into props, so `SpotItem` receives `name`, `category` and so on without listing each one.
+- The badge is passed as `children`, not as a prop. The parent decides what the slot contains.
+
+## Why `children` and not a prop
+
+A prop like `badge={<span>Open now</span>}` works and is sometimes the right call. `children` is better when the slot is the main content of the component, because the JSX reads like ordinary nesting.
+
+The Web Component equivalent is `<slot>`, covered in [Lesson 2](/sdev-2150-intermediate-frontend/course-lessons/02-web-components-review-and-composition/).
+
+## Default values
+
+A prop can have a default.
+
+```jsx
+function SpotItem({ name, category = 'Uncategorized' }) {
+  return <li>{name} ({category})</li>;
+}
+```
+
+If the parent does not pass `category`, or passes `undefined`, the default applies.
+
+
+
+## Practice
+
+
+1. Add an `onSelect` prop to `SpotItem` and make the `<li>` a `<button>` that calls it with the spot's id.
+2. Add a second `children` slot by passing a `footer` prop instead, and render it under the price line.
+3. Give `price` a default of 0 and explain when the default applies.
+4. Rewrite the badge as a prop instead of `children` and describe one situation where that is clearer.
+
+<details>
+<summary>Answers</summary>
+
+1. `onClick={() => onSelect(spot.id)}` on the button.
+2. Render `{footer}` under the price paragraph.
+3. When the prop is `undefined`, including when the key is present but the value is not.
+4. When there are two optional slots, naming each one makes the parent's intent explicit.
+
+</details>

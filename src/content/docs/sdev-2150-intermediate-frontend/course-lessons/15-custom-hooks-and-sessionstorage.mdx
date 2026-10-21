@@ -1,0 +1,140 @@
+---
+title: "15. Custom Hooks and sessionStorage"
+description: "Extracting stateful logic into a reusable custom hook, and persisting it to sessionStorage so it survives a reload."
+sidebar:
+  order: 15
+difficulty: intermediate
+readingTime: 30
+tags: [react, hooks, usestate, sessionstorage]
+---
+
+A hook is a function that uses other hooks. `useState` and `useEffect` are built in. A custom hook is one you write, and its purpose is to reuse stateful logic between components without duplicating the component.
+
+The other half of this lesson is persistence. `sessionStorage` is a per-tab key-value store that survives a reload and is cleared when the tab closes. It is the right place for a filter state you want to keep during a session.
+
+## A custom hook
+
+The filter state from Lesson 12 is a good candidate. Three related pieces of state and a filter function.
+
+```jsx
+import { useState } from 'react';
+
+export function useSpotFilters(spots) {
+  const [criteria, setCriteria] = useState({
+    search: '',
+    categories: [],
+    openNowOnly: false,
+  });
+
+  function setSearch(search) {
+    setCriteria((prev) => ({ ...prev, search }));
+  }
+
+  function toggleCategory(category) {
+    setCriteria((prev) => ({
+      ...prev,
+      categories: prev.categories.includes(category)
+        ? prev.categories.filter((c) => c !== category)
+        : [...prev.categories, category],
+    }));
+  }
+
+  function setOpenNowOnly(openNowOnly) {
+    setCriteria((prev) => ({ ...prev, openNowOnly }));
+  }
+
+  const visible = spots.filter((s) => {
+    const matchesSearch = s.name.toLowerCase().includes(criteria.search.toLowerCase());
+    const matchesCategory =
+      criteria.categories.length === 0 || criteria.categories.includes(s.category);
+    const matchesOpen = !criteria.openNowOnly || s.openNow;
+    return matchesSearch && matchesCategory && matchesOpen;
+  });
+
+  return { criteria, visible, setSearch, toggleCategory, setOpenNowOnly };
+}
+```
+
+Use it like a built-in hook.
+
+```jsx
+function DirectoryPage({ spots }) {
+  const { criteria, visible, setSearch, toggleCategory, setOpenNowOnly } =
+    useSpotFilters(spots);
+
+  return (
+    <>
+      <Filters
+        criteria={criteria}
+        onSearch={setSearch}
+        onToggleCategory={toggleCategory}
+        onOpenNowOnly={setOpenNowOnly}
+      />
+      <Results spots={visible} />
+    </>
+  );
+}
+```
+
+The rules for a custom hook are the rules for hooks: call it at the top level, never inside a condition or a loop, and prefix the name with `use` so linting can check it.
+
+## Persist to sessionStorage
+
+`sessionStorage.setItem(key, value)` stores a string. JSON round-trip the state.
+
+```jsx
+export function useSessionState(key, initial) {
+  const [value, setValue] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem(key);
+      return stored ? JSON.parse(stored) : initial;
+    } catch {
+      return initial;
+    }
+  });
+
+  useEffect(() => {
+    sessionStorage.setItem(key, JSON.stringify(value));
+  }, [key, value]);
+
+  return [value, setValue];
+}
+```
+
+The lazy initialiser runs once, on the first render. The `try` block guards against a full or blocked store.
+
+Use it in place of `useState`.
+
+```jsx
+const [criteria, setCriteria] = useSessionState('campus-eats-filters', {
+  search: '',
+  categories: [],
+  openNowOnly: false,
+});
+```
+
+Reload the page. The filters are still applied. Close the tab and they are gone, which is the difference between `sessionStorage` and `localStorage`.
+
+## What belongs in a hook
+
+Extract a custom hook when the same stateful logic appears in two components, or when a component's stateful part is reusable but its markup is not. Do not extract one for a single use; that is just an extra file.
+
+
+
+## Practice
+
+
+1. Add a "Clear" button to the hook that resets the criteria to the initial value.
+2. Add a `sort` criterion to the hook and sort the visible list by price.
+3. Change `useSessionState` to accept a function as the initial value, like `useState` does.
+4. Explain why the `useEffect` dependency array contains both `key` and `value`.
+
+<details>
+<summary>Answers</summary>
+
+1. A `reset` function that calls `setValue(initial)` and is returned alongside the others.
+2. A `sort` field in the criteria and a `[...visible].sort()` before returning.
+3. `typeof initial === 'function' ? initial() : initial` in the lazy initialiser.
+4. The effect must run when either changes, or the stored value goes stale.
+
+</details>

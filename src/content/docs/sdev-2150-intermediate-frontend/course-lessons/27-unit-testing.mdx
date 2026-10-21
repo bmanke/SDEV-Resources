@@ -1,0 +1,164 @@
+---
+title: "27. Unit Testing"
+description: "Testing React components with Vitest and React Testing Library: configuring the environment, rendering with providers, and testing behaviour."
+sidebar:
+  order: 27
+difficulty: intermediate
+readingTime: 45
+tags: [react, testing, vitest, rtl]
+---
+
+Tests are how you change code without fear. This lesson sets up Vitest with React Testing Library, writes tests for the Campus Eats components, and deals with the three problems that make React testing harder than plain JavaScript testing: JSX, providers and routers.
+
+## Philosophy
+
+Test what the user sees and what the user does. Do not test implementation details, and do not read component state directly.
+
+A test that asserts `state.count === 3` breaks when you rename the state variable. A test that asserts the button says "3 spots" survives a rewrite of the component's internals.
+
+## Install
+
+```sh
+npm install -D vitest @vitejs/plugin-react @testing-library/react
+```
+
+## Configure
+
+Vitest reads the Vite config, so the React plugin has to be there for JSX to compile.
+
+```js
+// vite.config.mjs
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+});
+```
+
+Add a test script to `package.json`.
+
+```json
+{
+  "scripts": {
+    "test": "vitest run"
+  }
+}
+```
+
+Vitest 5 defaults to a browser-like environment, so components render without a browser.
+
+## First test
+
+```jsx
+// src/components/layout/Header.test.jsx
+import { test, expect } from 'vitest';
+import { screen } from '@testing-library/react';
+import Header from './Header';
+
+test('renders the application title', () => {
+  render(<Header tagline="Find something to eat between classes" />);
+
+  expect(screen.getByText('Campus Eats')).toBeTruthy();
+});
+```
+
+```sh
+npm test
+```
+
+## The provider problem
+
+`Header` uses `useContext(ThemeContext)`. Rendering it outside a provider gives a context value of `undefined`, and the test fails on `theme` being read from nothing.
+
+Write a custom render function that supplies the providers a component needs.
+
+```jsx
+// src/test-utils.jsx
+import { render } from '@testing-library/react';
+import { ThemeContext } from './context/ThemeContext';
+import { MemoryRouter } from 'react-router';
+
+export function renderWithProviders(ui, options = {}) {
+  return render(
+    <ThemeContext.Provider value={{ theme: 'light', toggleTheme: () => {} }}>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </ThemeContext.Provider>,
+    options
+  );
+}
+```
+
+Two providers, one for the theme and one for the router. `MemoryRouter` is the test-safe router, because it does not touch the real URL.
+
+```jsx
+test('renders the application title', () => {
+  renderWithProviders(<Header tagline="Find something to eat between classes" />);
+
+  expect(screen.getByText('Campus Eats')).toBeTruthy();
+});
+```
+
+## Testing behaviour
+
+```jsx
+test('shows the tagline', () => {
+  renderWithProviders(<Header tagline="Find something to eat between classes" />);
+
+  expect(screen.getByText('Find something to eat between classes')).toBeTruthy();
+});
+```
+
+```jsx
+test('toggles the theme label when clicked', async () => {
+  renderWithProviders(<Header tagline="x" />);
+
+  const button = screen.getByRole('button', { name: /theme/i });
+  expect(button.textContent).toContain('light');
+
+  await userEvent.click(button);
+  expect(button.textContent).toContain('dark');
+});
+```
+
+`getByRole` is preferred over `getByText` because it asserts accessibility, not just content. A button that is not a button to a screen reader is a bug the test should catch.
+
+## Queries
+
+| Query | Matches | Throws if |
+| --- | --- | --- |
+| `getByRole` | One element by role and name | Zero or many |
+| `getByText` | One element by text content | Zero or many |
+| `queryByRole` | Same, returns null instead of throwing | Many |
+| `findByRole` | Same, waits for it to appear | Nothing appears |
+
+`queryBy` for asserting absence, `find` for waiting on async.
+
+## Coverage
+
+```sh
+npx vitest run --coverage
+```
+
+Coverage is a signal, not a goal. A component with 100 percent coverage and no test for its error state is untested where it matters.
+
+
+
+## Practice
+
+
+1. Write a test that the theme button starts with "light".
+2. Write a test that `SpotItem` renders the "Open now" badge when `openNow` is true.
+3. Write a test that `SpotItem` does not render the badge when `openNow` is false.
+4. Explain why `MemoryRouter` is used instead of `BrowserRouter` in tests.
+
+<details>
+<summary>Answers</summary>
+
+1. `renderWithProviders(<Header tagline="x" />)` then assert on the button's text.
+2. `renderWithProviders(<SpotItem {...spot} openNow />)` then `getByText('Open now')`.
+3. `renderWithProviders(<SpotItem {...spot} openNow={false} />)` then `expect(screen.queryByText('Open now')).toBeNull()`.
+4. `BrowserRouter` reads and writes the real URL, which is shared global state across tests. `MemoryRouter` keeps it in memory.
+
+</details>

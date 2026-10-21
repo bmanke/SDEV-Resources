@@ -1,0 +1,96 @@
+---
+title: "6. Component and Async Programming Exercises"
+description: "Practice with Promises, async and await, fetch, JSONPlaceholder and custom events. The exercise set for the component and async programming week."
+sidebar:
+  order: 6
+difficulty: beginner
+readingTime: 30
+tags: [exercises, promises, async, fetch]
+---
+
+This week is practice. The four exercises below cover Promises, `async` and `await`, `fetch`, parallel requests and custom events. They are the same topics as the [Lesson 06 exercises](/sdev-2150-intermediate-frontend/exercises/lesson-06-overview/) in the Exercises section, written here with the Campus Eats context so you can attempt them with or without that section.
+
+You will use the [JSONPlaceholder](https://jsonplaceholder.typicode.com/) fake API for the fetch work, so nothing here needs the Lesson 5 backend running.
+
+## Exercise 1: A Promise chain
+
+Write a function `loadSpot(id)` that returns a Promise resolving to a spot object after a 500ms delay. Chain two calls so the second runs after the first.
+
+```js
+function loadSpot(id) {
+  return new Promise((resolve) => {
+    setTimeout(() => resolve({ id, name: 'Tandoor Hut' }), 500);
+  });
+}
+```
+
+Goal: see that a Promise is a value that arrives later, and that `then` receives the resolved value.
+
+## Exercise 2: Chained and parallel requests
+
+Fetch two users from JSONPlaceholder, one after the other, then fetch two in parallel with `Promise.all`. Time both versions.
+
+```js
+const sequential = async () => {
+  const a = await fetch('https://jsonplaceholder.typicode.com/users/1').then((r) => r.json());
+  const b = await fetch('https://jsonplaceholder.typicode.com/users/2').then((r) => r.json());
+  return [a, b];
+};
+
+const parallel = async () => {
+  const [a, b] = await Promise.all([
+    fetch('https://jsonplaceholder.typicode.com/users/1').then((r) => r.json()),
+    fetch('https://jsonplaceholder.typicode.com/users/2').then((r) => r.json()),
+  ]);
+  return [a, b];
+};
+```
+
+Goal: understand that `await` inside a loop is sequential by default, and that `Promise.all` starts every request at once.
+
+## Exercise 3: A custom event component
+
+Build a Web Component that emits a `user-selected` event when clicked, and a second component that re-renders when it hears it. This is the Lesson 3 pattern, applied with different data.
+
+## Exercise 4: A small data display component
+
+Fetch a list from JSONPlaceholder and render it in a Web Component. Add a loading state and an error state.
+
+```js
+class UserList extends HTMLElement {
+  async connectedCallback() {
+    this.innerHTML = '<p>Loading...</p>';
+    try {
+      const res = await fetch('https://jsonplaceholder.typicode.com/users');
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+      const users = await res.json();
+      this.innerHTML = `<ul>${users.map((u) => `<li>${u.name}</li>`).join('')}</ul>`;
+    } catch (err) {
+      this.innerHTML = `<p>Could not load users: ${err.message}</p>`;
+    }
+  }
+}
+customElements.define('user-list', UserList);
+```
+
+Goal: see that a component is a good place for loading and error states, because it is the unit that re-renders.
+
+
+
+## Practice
+
+
+1. Rewrite Exercise 2 with `Promise.allSettled` so one failed request does not reject the whole thing.
+2. Add a timeout to Exercise 4 with `AbortController` so a slow request does not hang the component.
+3. Add a retry button to the error state in Exercise 4.
+4. Explain why `await` inside a `for` loop is usually the wrong tool for independent requests.
+
+<details>
+<summary>Answers</summary>
+
+1. `Promise.allSettled` resolves with `{ status, value }` or `{ status, reason }` per promise, so inspect each result.
+2. `const ctrl = new AbortController(); fetch(url, { signal: ctrl.signal })` and `setTimeout(() => ctrl.abort(), 5000)`.
+3. Store a bound method on the class and call it from the button's click handler.
+4. Each iteration waits for the previous one, so total time is the sum of all requests instead of the longest.
+
+</details>

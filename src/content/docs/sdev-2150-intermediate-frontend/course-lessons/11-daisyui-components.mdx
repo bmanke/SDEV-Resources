@@ -1,0 +1,95 @@
+---
+title: "11. DaisyUI Components"
+description: "DaisyUI on top of Tailwind: buttons, badges, cards, inputs and themes, and when a component library is worth it."
+sidebar:
+  order: 11
+difficulty: beginner
+readingTime: 25
+tags: [daisyui, tailwind, components, theming]
+---
+
+Tailwind gives you utilities. DaisyUI gives you components. Together they are the styling approach for the rest of the course: Tailwind for layout and spacing, DaisyUI for the elements that have a shape.
+
+## Install
+
+```sh
+npm install -D daisyui
+```
+
+```css
+/* src/index.css */
+@import 'tailwindcss';
+@plugin 'daisyui' {
+  themes: light --default, dark --prefersdark;
+}
+```
+
+## What you get
+
+A class per element, styled with the theme's colours.
+
+```jsx
+<button className="btn btn-primary">Add a spot</button>
+<span className="badge badge-success">Open now</span>
+<input className="input input-bordered" placeholder="Search spots..." />
+```
+
+Compare with the pure Tailwind version of a button, which is a long list of utility classes for padding, radius, colour and hover state. DaisyUI writes that list once.
+
+## The Campus Eats cards in DaisyUI
+
+```jsx
+<div className="card bg-base-100 shadow-sm">
+  <div className="card-body">
+    <h2 className="card-title">Edit spot</h2>
+    <p>Change the details of an existing spot.</p>
+    <button className="btn btn-primary">Save changes</button>
+  </div>
+</div>
+```
+
+`card`, `card-body` and `card-title` are DaisyUI. `bg-base-100` is a theme colour from the `light` and `dark` themes configured above.
+
+## Theme colours
+
+DaisyUI's semantic colour classes reference the active theme. `bg-base-100` is a surface colour, `text-base-content` is the text colour, and `btn-primary` is the accent. Switching the `data-theme` attribute on `<html>` switches every semantic colour at once.
+
+```jsx
+document.documentElement.dataset.theme = 'dark';
+```
+
+This is how the theme toggle in [Lesson 23](/sdev-2150-intermediate-frontend/course-lessons/23-shared-state-with-context/) works. The component sets one attribute and every DaisyUI class follows.
+
+## When to use it
+
+Use DaisyUI for anything that looks like a control: buttons, inputs, checkboxes, badges, cards, modals, tabs. Use Tailwind utilities for layout: grid, flex, spacing, sizing. The split is not about correctness, it is about how much you want to own.
+
+Owning a button means writing and maintaining its hover, focus, active and disabled states. A library has already done that, and its version is probably better tested than yours.
+
+## The cost
+
+- A class from a library is less descriptive than the utilities it replaces. `btn` tells you less than `rounded-lg bg-primary px-4 py-2`.
+- You depend on the library's naming and its release notes.
+- A design that does not match the library's assumptions fights it.
+
+For a course project, the trade is worth it. For a design system, it often is not.
+
+
+
+## Practice
+
+
+1. Replace the plain `<input>` in `Filters` with `input input-bordered` and describe the visual difference.
+2. Add a `btn-ghost` variant to the theme toggle button.
+3. Add a `badge badge-error` for spots with a rating under 4.
+4. Explain why `bg-base-100` is preferable to `bg-white` when the app has a dark theme.
+
+<details>
+<summary>Answers</summary>
+
+1. A visible border and consistent padding, instead of browser default styling.
+2. One class change.
+3. `{spot.rating < 4 && <span className="badge badge-error">Low rating</span>}`.
+4. `bg-base-100` resolves per theme, so it is correct in both. `bg-white` is white in both.
+
+</details>

@@ -1,0 +1,103 @@
+---
+title: "10. Responsive Layout with Tailwind"
+description: "Breakpoints, grid columns and responsive utilities in Tailwind CSS 4, applied to the Campus Eats three-column layout."
+sidebar:
+  order: 10
+difficulty: beginner
+readingTime: 30
+tags: [tailwind, css, responsive, layout]
+---
+
+Campus Eats has three regions that should be side by side on a wide screen and stacked on a phone. Tailwind's responsive prefixes and CSS Grid do that with classes, not a media-query stylesheet.
+
+## The default layout
+
+The markup from [Lesson 9](/sdev-2150-intermediate-frontend/course-lessons/09-composition-strategy/) is the starting point.
+
+```jsx
+<main className="mx-auto grid max-w-7xl grid-cols-1 gap-4 p-6 md:grid-cols-3">
+  <aside className="space-y-4">{left}</aside>
+  <section className="space-y-4 md:col-span-2">{middle}</section>
+  <section className="md:col-span-3">{right}</section>
+</main>
+```
+
+## How the prefixes work
+
+`grid-cols-1` applies at every size. `md:grid-cols-3` applies from the `md` breakpoint up. Without a prefix, a class applies everywhere.
+
+Tailwind's default breakpoints:
+
+| Prefix | Min width |
+| --- | --- |
+| `sm` | 40rem (640px) |
+| `md` | 48rem (768px) |
+| `lg` | 64rem (1024px) |
+| `xl` | 80rem (1280px) |
+
+Mobile first. Write the phone layout with no prefix, then add prefixed classes for larger screens.
+
+## What each class does
+
+- `grid` sets `display: grid`.
+- `grid-cols-1` and `grid-cols-3` set the number of equal-width columns.
+- `gap-4` sets the gap between rows and columns.
+- `md:col-span-2` makes an element span two of the three columns.
+- `max-w-7xl` and `mx-auto` centre the layout with a maximum width.
+- `p-6` is padding of 1.5rem on all sides.
+
+## The stacking rule
+
+At phone width the grid has one column, so `aside`, `section` and `section` stack in DOM order: Filters, Results, Details. From `md` up, the grid has three columns, so Filters takes one and Results takes two, and Details spans all three below.
+
+That is the whole responsive layout. One class per decision, and the decision is visible in the markup.
+
+## Flexbox for the parts inside a card
+
+Grid arranges regions. Flexbox arranges things inside a region.
+
+```jsx
+<div className="flex items-start justify-between gap-3">
+  <h3 className="text-sm font-semibold">{name}</h3>
+  <small className="text-xs opacity-60">{category}</small>
+</div>
+```
+
+- `flex` starts a flex row.
+- `items-start` aligns children to the top.
+- `justify-between` pushes the first child to the left and the last to the right.
+- `gap-3` spaces them.
+
+`flex-wrap` lets children wrap to a second line when they do not fit, which is how the category buttons behave.
+
+```jsx
+<div className="flex flex-wrap gap-2">
+  {categories.map((label) => (
+    <button key={label} className="btn btn-sm">{label}</button>
+  ))}
+</div>
+```
+
+## Check it
+
+Open the page and drag the browser window narrow. At phone width the three regions stack. Widen past `md` and they move into columns. Resize past `lg` and nothing changes, because no `lg:` class is used. Add one and see the difference.
+
+
+
+## Practice
+
+
+1. Add a `lg:grid-cols-4` variant and give Details `lg:col-span-1` so the layout becomes two side-by-side cards at large sizes.
+2. Make the header wrap with `flex-wrap` and describe when that matters.
+3. Replace `grid-cols-1` with `grid-cols-2` and explain what happens on a 600px-wide phone.
+4. Hide the Details region on phones with a `hidden md:block` pair.
+
+<details>
+<summary>Answers</summary>
+
+1. Three classes change, and the element spanning three columns becomes the outlier.
+2. When the nav and the title do not fit on one line, wrapping is better than overflowing.
+3. Two narrow columns on a screen that is probably too small for them. `grid-cols-1` is the safer default.
+4. The element renders at `md` and up, and takes no space below it.
+
+</details>

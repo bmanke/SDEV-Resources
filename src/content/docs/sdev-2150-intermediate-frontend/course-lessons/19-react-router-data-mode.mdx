@@ -1,0 +1,152 @@
+---
+title: "19. React Router Data Mode"
+description: "Loaders, actions and router-aware forms: moving data loading and mutations into the router itself."
+sidebar:
+  order: 19
+difficulty: advanced
+readingTime: 45
+tags: [react, routing, loaders, actions]
+---
+
+Through Lesson 18 the components fetch their own data in `useEffect`. React Router's data mode moves that work into the route, where the router runs it before the component renders.
+
+This is the biggest structural change in the course. The payoff is that a component receives data as a prop instead of fetching it, and forms submit to a function instead of a URL.
+
+## Loaders
+
+A loader is a function the router calls before rendering a route.
+
+```jsx
+const API = 'http://localhost:3000';
+
+async function getJSON(path) {
+  const res = await fetch(`${API}${path}`);
+  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+  return res.json();
+}
+
+export async function directoryLoader() {
+  return { spots: await getJSON('/spots') };
+}
+
+export async function adminLoader({ params }) {
+  const spots = await getJSON('/spots');
+  if (!params.spotId) return { spots, selected: null };
+  return { spots, selected: await getJSON(`/spots/${params.spotId}`) };
+}
+```
+
+`params` is the same object `useParams` returns. The loader can read the route parameters.
+
+## Wire the loaders
+
+```jsx
+export const router = createBrowserRouter([
+  {
+    path: '/',
+    Component: App,
+    children: [
+      { index: true, Component: DirectoryPage, loader: directoryLoader },
+      { path: 'admin', Component: AdminPage, loader: adminLoader, action: adminAction },
+      { path: 'admin/:spotId', Component: AdminPage, loader: adminLoader, action: adminAction },
+    ],
+  },
+]);
+```
+
+## Read the data
+
+```jsx
+import { useLoaderData } from 'react-router';
+
+export default function DirectoryPage() {
+  const { spots } = useLoaderData();
+
+  return <Results spots={spots} />;
+}
+```
+
+No `useEffect`, no loading state in the component. The router handles it.
+
+## Actions
+
+An action is a function the router calls when a form on that route submits.
+
+```jsx
+import { redirect } from 'react-router';
+
+export async function adminAction({ request, params }) {
+  const formData = await request.formData();
+
+  const payload = {
+    name: formData.get('name'),
+    category: formData.get('category'),
+    building: formData.get('building') || '',
+    price: Number(formData.get('price')),
+    rating: Number(formData.get('rating')),
+    openNow: formData.get('openNow') === 'on',
+  };
+
+  const editing = Boolean(params.spotId);
+  const res = await fetch(
+    editing ? `${API}/spots/${params.spotId}` : `${API}/spots`,
+    {
+      method: editing ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!res.ok) throw new Error('Could not save the spot');
+  return redirect('/admin');
+}
+```
+
+## Router-aware forms
+
+```jsx
+import { Form } from 'react-router';
+
+<Form method="post">
+  <input name="name" value={form.name} onChange={update('name')} required />
+  <input name="category" value={form.category} onChange={update('category')} required />
+  <button className="btn btn-primary" type="submit">Save</button>
+</Form>
+```
+
+The `Form` component submits to the route's action instead of a URL. No `onSubmit`, no `e.preventDefault()`.
+
+## What this buys you
+
+| Component mode, Lessons 16 to 18 | Data mode |
+| --- | --- |
+| `useEffect` fetches after render | Loader runs before render |
+| Component owns loading state | Router owns loading state |
+| `onSubmit` with `preventDefault` | `Form` and an action |
+| Data logic spread across components | Data logic in the route |
+
+The component becomes a function from data to markup. That is the same promise as [Lesson 9](/sdev-2150-intermediate-frontend/course-lessons/09-composition-strategy/)'s presentational components, applied to data.
+
+## When to use it
+
+Data mode is the recommended pattern for new React Router applications. Component mode still works and is still documented. The trade is clear: data mode moves complexity from components to routes, and the routes are where it is easier to reason about.
+
+
+
+## Practice
+
+
+1. Add a `deleteAction` and a delete button on the admin page.
+2. Add a `shouldRevalidate` function that re-runs the loader after a successful action.
+3. Add a query parameter to the directory loader so the API filters instead of the client.
+4. Explain why the action returns `redirect` instead of the saved object.
+
+<details>
+<summary>Answers</summary>
+
+1. An action that reads the id from `params`, calls `DELETE`, and redirects.
+2. The default behaviour revalidates after actions. Override it only to opt out.
+3. `request.url` in the loader, then parse it with `URL` and pass the query to the API.
+4. A redirect navigates. Returning data leaves the form submitted but the page unchanged, which is usually wrong.
+
+</details>

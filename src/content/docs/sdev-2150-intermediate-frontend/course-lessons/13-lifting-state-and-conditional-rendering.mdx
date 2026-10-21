@@ -1,0 +1,179 @@
+---
+title: "13. Lifting State and Conditional Rendering"
+description: "Moving shared state up to a common parent, passing it down as props, and conditional rendering with validation for the admin form."
+sidebar:
+  order: 13
+difficulty: intermediate
+readingTime: 35
+tags: [react, state, lifting, forms, validation]
+---
+
+Lesson 12 put the filter state inside `Filters`. `Results` needs the same state, and props only flow down. The answer is to move the state to the closest common ancestor, a move called lifting state.
+
+## The problem
+
+```jsx
+function DirectoryPage() {
+  return (
+    <>
+      <Filters />
+      <Results />
+    </>
+  );
+}
+```
+
+`Filters` has the state. `Results` needs it. A component cannot reach into a sibling.
+
+## Lift it
+
+Move the state to `DirectoryPage` and pass it down.
+
+```jsx
+import { useState } from 'react';
+import Filters from '../components/Filters';
+import Results from '../components/Results';
+import Details from '../components/Details';
+
+export default function DirectoryPage() {
+  const [spots] = useState([
+    { id: 'tandoor', name: 'Tandoor Hut', category: 'Hot lunch', openNow: true },
+    { id: 'coffeecart', name: 'Bridge Coffee Cart', category: 'Coffee', openNow: false },
+  ]);
+  const [visible, setVisible] = useState(spots);
+  const [selectedId, setSelectedId] = useState('tandoor');
+
+  const selected = spots.find((s) => s.id === selectedId) ?? spots[0];
+
+  return (
+    <>
+      <Filters spots={spots} onFilterChange={setVisible} />
+      <Results spots={visible} onSelect={setSelectedId} />
+      <Details spot={selected} />
+    </>
+  );
+}
+```
+
+`Filters` becomes presentational. It receives `spots` and a callback, and calls the callback when the criteria change.
+
+```jsx
+export default function Filters({ spots, onFilterChange }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [openNowOnly, setOpenNowOnly] = useState(false);
+
+  function applyFilters(nextSearch, nextCats, nextOpen) {
+    const matches = (spots ?? []).filter((s) => {
+      const matchesSearch = s.name.toLowerCase().includes(nextSearch.toLowerCase());
+      const matchesCategory = nextCats.length === 0 || nextCats.includes(s.category);
+      const matchesOpen = !nextOpen || s.openNow;
+      return matchesSearch && matchesCategory && matchesOpen;
+    });
+    onFilterChange(matches);
+  }
+
+  return (
+    <Card title="Filters">
+      <div className="space-y-4 p-4">
+        <input
+          type="search"
+          className="input input-bordered w-full"
+          placeholder="Search spots..."
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            applyFilters(e.target.value, selectedCategories, openNowOnly);
+          }}
+        />
+      </div>
+    </Card>
+  );
+}
+```
+
+The parent owns the list. The child owns the inputs and announces.
+
+## Conditional rendering
+
+Three forms.
+
+```jsx
+{spot.openNow && <span className="badge">Open now</span>}
+```
+
+Renders the badge when `openNow` is true, and nothing when it is false.
+
+```jsx
+{spots.length === 0 ? <p>No spots found.</p> : <ul>...</ul>}
+```
+
+A ternary picks between two options.
+
+```jsx
+if (!spot) return null;
+```
+
+Early return, for the case where there is nothing to render at all.
+
+Watch the falsy values. `false`, `null` and `undefined` render nothing, but `0` renders as a zero. `{items.length && <List />}` shows a stray `0` when the list is empty. Use `{items.length > 0 && ...}`.
+
+## Validation
+
+The admin form should not submit bad data. Validate before calling the API.
+
+```jsx
+const [errors, setErrors] = useState({});
+
+function validate(form) {
+  const next = {};
+  if (!form.name.trim()) next.name = 'Name is required';
+  if (!form.category.trim()) next.category = 'Category is required';
+  if (Number.isNaN(Number(form.price)) || form.price < 0) {
+    next.price = 'Price must be a non-negative number';
+  }
+  return next;
+}
+
+function handleSubmit(e) {
+  e.preventDefault();
+  const next = validate(form);
+  setErrors(next);
+  if (Object.keys(next).length > 0) return;
+  onSubmit(form);
+}
+```
+
+Render the errors beside the fields.
+
+```jsx
+<label className="label">
+  <span className="label-text">Name</span>
+  <input className="input input-bordered" name="name" value={form.name} onChange={update('name')} />
+</label>
+{errors.name && <p className="text-error text-xs">{errors.name}</p>}
+```
+
+## Where lifting stops
+
+Lift state only as far as it needs to go. If two components need the same value, their closest common parent is far enough. If the whole app needs it, that is [Context](/sdev-2150-intermediate-frontend/course-lessons/23-shared-state-with-context/), not a higher lift.
+
+
+
+## Practice
+
+
+1. Add a sort control to `DirectoryPage` and pass it to `Results` as a prop.
+2. Add validation for a rating between 0 and 5.
+3. Explain why `visible` state in `DirectoryPage` can get out of sync with `spots`, and one way to prevent that.
+4. Replace the `if (!spot) return null` early return with a ternary and describe the difference.
+
+<details>
+<summary>Answers</summary>
+
+1. A `sortBy` state in the parent, passed down with a callback that sets it.
+2. `if (form.rating < 0 || form.rating > 5) next.rating = 'Rating must be between 0 and 5'`.
+3. The derived array is a second copy. Compute it during render instead of storing it.
+4. The ternary is an expression so it composes inside JSX, but the early return is clearer when the whole component has nothing to render.
+
+</details>

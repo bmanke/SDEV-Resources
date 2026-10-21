@@ -1,0 +1,125 @@
+---
+title: "3. The Reactive Pattern with Events"
+description: "The core pattern behind every framework: a user action, an event that describes what changed, and a component that reacts to it."
+sidebar:
+  order: 3
+difficulty: beginner
+readingTime: 30
+tags: [events, custom-events, reactivity]
+---
+
+Before React, understand the problem React solves. A UI is a function of state, and state changes when the user does something. The hard part is keeping the two in sync.
+
+The old answer was to update the DOM by hand. Click a filter button, query the list, remove the matching items, update the count. It works, and every step is a chance to get it wrong.
+
+The pattern in this lesson is the bridge: instead of writing imperative DOM updates, write components that emit a custom event describing what changed, and other components that listen and re-render themselves.
+
+## The pattern
+
+Three pieces:
+
+1. A user action, like a click or a keystroke.
+2. A custom event that says what changed, in data.
+3. A component that hears the event and re-renders from its data.
+
+No framework. No manual DOM surgery. The same idea React formalizes with `state` and re-rendering.
+
+## Build a filter that emits an event
+
+A filter button should not know about the results list. It should announce what the user picked.
+
+```js
+class CategoryFilter extends HTMLElement {
+  connectedCallback() {
+    this.innerHTML = '<button>Hot lunch</button>';
+    this.querySelector('button').addEventListener('click', () => {
+      this.dispatchEvent(
+        new CustomEvent('category-selected', {
+          detail: { category: 'Hot lunch' },
+          bubbles: true,
+        })
+      );
+    });
+  }
+}
+customElements.define('category-filter', CategoryFilter);
+```
+
+`bubbles: true` lets the event travel up the DOM so a parent can listen for it. `detail` carries the data. The button knows one thing: the user picked a category.
+
+## A list that reacts
+
+The results list listens for the event and re-renders from its own data.
+
+```js
+class SpotResults extends HTMLElement {
+  spots = [
+    { name: 'Tandoor Hut', category: 'Hot lunch', price: 12 },
+    { name: 'Bridge Coffee Cart', category: 'Coffee', price: 4 },
+  ];
+
+  connectedCallback() {
+    this.render();
+    this.addEventListener('category-selected', (e) => {
+      this.selectedCategory = e.detail.category;
+      this.render();
+    });
+  }
+
+  render() {
+    const visible = this.selectedCategory
+      ? this.spots.filter((s) => s.category === this.selectedCategory)
+      : this.spots;
+    this.innerHTML = `
+      <h2>Results (${visible.length})</h2>
+      <ul>
+        ${visible.map((s) => `<li>${s.name} - $${s.price}</li>`).join('')}
+      </ul>
+    `;
+  }
+}
+customElements.define('spot-results', SpotResults);
+```
+
+## Wire the page
+
+```html
+<category-filter></category-filter>
+<spot-results></spot-results>
+```
+
+```js
+document.querySelector('category-filter')
+  .addEventListener('category-selected', (e) => {
+    document.querySelector('spot-results')
+      .dispatchEvent(new CustomEvent('category-selected', { detail: e.detail }));
+  });
+```
+
+Click the filter, the list updates. No `querySelector` on a list item, no `classList` toggle, no counting.
+
+## Why this matters
+
+This is the reactive pattern. The filter does not update the list. The filter announces. The list re-renders. The data is the source of truth, and the DOM is a projection of it.
+
+React makes the same move with `useState`. You change the state, React re-runs the render function, and the DOM is a projection of the new state. The custom event is replaced by a function call, but the shape of the idea is identical.
+
+
+
+## Practice
+
+
+1. Add a second filter button for Coffee that emits the same event with a different category.
+2. Add a `Clear` button that emits an event with `detail: { category: null }` and make the list show all spots when it hears it.
+3. Add a search input that emits a `search-changed` event with the current value on every keystroke, and filter the list by name.
+4. Explain why `bubbles: true` is needed for the page-level wiring to work.
+
+<details>
+<summary>Answers</summary>
+
+1. Add a second `<button>` and read the category from a `data-category` attribute.
+2. In the list, treat a null category as "no filter" and render all spots.
+3. `input.addEventListener('input', (e) => dispatchEvent(new CustomEvent('search-changed', { detail: { term: e.target.value }, bubbles: true })))`.
+4. Without bubbling, the event stops at the element that dispatched it, and the page-level listener never hears it.
+
+</details>

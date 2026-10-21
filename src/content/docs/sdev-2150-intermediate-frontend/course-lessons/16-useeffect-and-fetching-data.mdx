@@ -1,0 +1,140 @@
+---
+title: "16. useEffect and Fetching Data"
+description: "Loading spots from the Lesson 5 Express API with useEffect, handling loading and error states, and the dependency array."
+sidebar:
+  order: 16
+difficulty: intermediate
+readingTime: 40
+tags: [react, useeffect, fetch, data]
+---
+
+The spots have been a hard-coded array since Lesson 7. This lesson replaces them with a `fetch` call to the Express API from [Lesson 5](/sdev-2150-intermediate-frontend/course-lessons/05-a-backend-for-campus-eats/). Start the server first.
+
+```sh
+node server.js
+```
+
+## The component that fetches
+
+`useEffect` takes a function and a dependency array. React runs the function after render, and again whenever a dependency changes.
+
+```jsx
+import { useEffect, useState } from 'react';
+
+export default function DirectoryPage() {
+  const [spots, setSpots] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    async function loadSpots() {
+      try {
+        const res = await fetch('http://localhost:3000/spots');
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        const data = await res.json();
+        setSpots(data);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadSpots();
+  }, []);
+
+  if (loading) return <p>Loading spots...</p>;
+  if (error) return <p>Could not load spots: {error}</p>;
+
+  return <Results spots={spots} />;
+}
+```
+
+Three pieces of state: the data, the loading flag and the error. Every fetch has all three, and forgetting the last two is the most common bug in this style.
+
+## The dependency array
+
+- No array: the effect runs after every render. With a state setter inside, that is an infinite loop.
+- An empty array: the effect runs once, after the first render. Correct for a fetch that does not depend on anything.
+- A list: the effect runs after the first render and again whenever one of the listed values changes.
+
+If the fetch depends on a prop or a piece of state, that value belongs in the array. React's lint rule catches the missing case.
+
+## Race conditions
+
+Two effects can be in flight at once. The second response can arrive before the first, and the late one will overwrite the newer state.
+
+```jsx
+useEffect(() => {
+  const controller = new AbortController();
+
+  async function loadSpots() {
+    try {
+      const res = await fetch('http://localhost:3000/spots', {
+        signal: controller.signal,
+      });
+      setSpots(await res.json());
+    } catch (err) {
+      if (err.name !== 'AbortError') setError(err.message);
+    }
+  }
+
+  loadSpots();
+  return () => controller.abort();
+}, []);
+```
+
+The cleanup function runs before the next effect and on unmount. Aborting the first request when the second starts removes the race.
+
+## A custom fetch hook
+
+The loading, error and data pattern is the same everywhere. Extract it.
+
+```jsx
+export function useSpots() {
+  const [spots, setSpots] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch('http://localhost:3000/spots', { signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+        return res.json();
+      })
+      .then(setSpots)
+      .catch((err) => {
+        if (err.name !== 'AbortError') setError(err.message);
+      })
+      .finally(() => setLoading(false));
+
+    return () => controller.abort();
+  }, []);
+
+  return { spots, loading, error };
+}
+```
+
+This is the manual version of what [TanStack Query](/sdev-2150-intermediate-frontend/course-lessons/24-server-state-with-tanstack-query/) does for you.
+
+
+
+## Practice
+
+
+1. Add a `refresh` function to `useSpots` that re-runs the fetch.
+2. Add a `spotId` parameter so the hook can fetch one spot.
+3. Explain why `setLoading(false)` belongs in `finally` and not after the `catch`.
+4. Describe what happens if the dependency array is omitted entirely.
+
+<details>
+<summary>Answers</summary>
+
+1. Move the fetch into a named function and return it with the other values.
+2. `useState(null)` for the spot, and the URL becomes `` `/spots/${spotId}` ``.
+3. `finally` runs on both paths. After the `catch` runs on neither, because the try block already returned.
+4. The effect runs after every render, and the `setSpots` call triggers another render, forever.
+
+</details>

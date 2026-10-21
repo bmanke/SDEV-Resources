@@ -60,6 +60,10 @@ export default defineConfig({
 							label: 'Intermediate Frontend Development',
 							items: [
 								{
+									label: 'Course Lessons',
+									items: [{ autogenerate: { directory: 'sdev-2150-intermediate-frontend/course-lessons' } }],
+								},
+								{
 									label: 'ReactJS Guide',
 									items: [{ autogenerate: { directory: 'sdev-2150-intermediate-frontend/reactjs-guide' } }],
 								},
