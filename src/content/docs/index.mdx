@@ -1,0 +1,43 @@
+---
+title: Software Development Resources
+description: A repository with code comments on exercises and assignments.
+template: doc
+hero:
+  tagline: A repository with code comments on exercises and assignments.
+  image:
+    file: ../../assets/logo.svg
+  actions:
+    - text: Get started
+      link: /getting-started/
+      icon: right-arrow
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+import Counter from '../../components/widgets/Counter.svelte';
+
+## What's included
+
+<CardGrid stagger>
+    <Card title="Easy to read code from previous and current courses" icon="document">
+       This includes SDEV-1150 Frontend Development, SDEV-1001 Programming Fundamentals,
+       SDEV-2150 Intermediate Frontend Development and SDEV-2401 Rapid Backend Development.
+    </Card>
+    <Card title="Sidebar navigation" icon="list-format">
+       Hand-written groups, auto-generated groups, badges and collapsible sections are all
+       configured in `astro.config.mjs`.
+    </Card>
+    <Card title="Dark mode" icon="moon">
+       Dark, light and system themes come built in. Brand colors for both modes live in
+       `src/styles/custom.css`.
+    </Card>
+    <Card title="Full-text search" icon="magnifier">
+       Pagefind indexes every page when you build the site. Press <kbd>/</kbd> or
+       <kbd>Ctrl</kbd> + <kbd>K</kbd> to search.
+    </Card>
+</CardGrid>
+
+## A live Svelte island
+
+This counter is a Svelte 5 component hydrated with `client:load`, right inside an MDX page.
+
+<Counter client:load label="Hello from Svelte" start={3} step={1} />

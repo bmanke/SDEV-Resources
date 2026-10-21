@@ -1,0 +1,202 @@
+---
+title: "6. Functions and Modules"
+description: "Package logic into reusable functions and organize programs across multiple files."
+difficulty: intermediate
+readingTime: 14
+tags: [python, functions, modules]
+sidebar:
+  order: 6
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A **function** is a named block of code you can run whenever you need it. Functions remove repetition, give ideas
+names, and let you test small pieces of a program on their own.
+
+## Defining and calling
+
+```python
+def greet():
+    print("Hello!")
+
+greet()      # nothing happens until you CALL the function
+greet()
+```
+
+## Parameters and return values
+
+Parameters are the inputs. `return` hands a result back to the caller.
+
+```python
+def area(width, height):
+    return width * height
+
+room = area(4, 5)       # 20
+print(room)
+```
+
+<Aside type="caution" title="print is not return">
+`print` only shows something on screen. If you want to use a result later (store it, add it, compare it), the function must `return` it. A function with no `return` gives back `None`.
+</Aside>
+
+A function can return more than one value. Python packs them into a tuple that you can unpack:
+
+```python
+def min_max(numbers):
+    return min(numbers), max(numbers)
+
+lowest, highest = min_max([4, 9, 2])
+print(lowest, highest)   # 2 9
+```
+
+## Default and keyword arguments
+
+```python
+def price_with_tax(price, tax_rate=0.05):      # tax_rate is optional
+    return round(price * (1 + tax_rate), 2)
+
+print(price_with_tax(100))                     # 105.0
+print(price_with_tax(100, 0.12))               # 112.0
+print(price_with_tax(tax_rate=0.07, price=100))  # keyword arguments can go in any order
+```
+
+Parameters with defaults must come after the ones without.
+
+## Docstrings
+
+A string right under the `def` line documents the function. Editors show it when you hover.
+
+```python
+def is_even(number):
+    """Return True if number is even, otherwise False."""
+    return number % 2 == 0
+```
+
+## Scope
+
+Variables created inside a function exist only while it runs.
+
+```python
+def add_ten(n):
+    result = n + 10      # `result` is local to this function
+    return result
+
+print(add_ten(5))
+# print(result)          # NameError: result is not defined out here
+```
+
+Prefer passing values in as parameters and returning results over reaching for global variables.
+
+## Functions that call functions
+
+Small functions combine into bigger ones. This keeps each piece easy to understand.
+
+```python title="rps_functions.py"
+import random
+
+CHOICES = ["rock", "paper", "scissors"]      # an ALL_CAPS name signals a constant
+
+def computer_choice():
+    return random.choice(CHOICES)
+
+def winner(player, computer):
+    """Return 'player', 'computer' or 'tie'."""
+    if player == computer:
+        return "tie"
+    beats = {"rock": "scissors", "paper": "rock", "scissors": "paper"}
+    return "player" if beats[player] == computer else "computer"
+
+def play():
+    player = input("rock, paper or scissors? ").lower()
+    computer = computer_choice()
+    print(f"Computer chose {computer}. Result: {winner(player, computer)}")
+
+if __name__ == "__main__":
+    play()
+```
+
+## Modules: splitting code across files
+
+Every `.py` file is a **module**. Another file can use its functions with `import`.
+
+```python title="shapes.py"
+import math
+
+def circle_area(radius):
+    return math.pi * radius ** 2
+
+def rectangle_area(width, height):
+    return width * height
+```
+
+```python title="main.py"
+import shapes                              # use as shapes.circle_area(...)
+from shapes import rectangle_area          # use the name directly
+from shapes import circle_area as circle   # rename it
+
+print(shapes.circle_area(2))
+print(rectangle_area(3, 4))
+print(circle(1))
+```
+
+### The `__main__` check
+
+When Python runs a file directly, the special variable `__name__` is `"__main__"`. When the file is imported, it is the module name instead. The
+check below lets a file act as both a program and a library, so importing it does not accidentally start the game:
+
+```python
+if __name__ == "__main__":
+    play()
+```
+
+### Packages
+
+A folder containing an `__init__.py` file is a **package**. It lets you group modules:
+
+```text
+pokemon_demo/
+├── main.py
+└── poke_package/
+    ├── __init__.py
+    └── poke_helper.py
+```
+
+```python title="main.py"
+from poke_package.poke_helper import get_name
+```
+
+Python also ships with a large standard library: `math`, `random`, `datetime`, `csv`, `json` and many more.
+
+## Check yourself
+
+1. Write `is_leap_year(year)` that returns `True` or `False`, then use it in a loop to print every leap year from 2000 to 2030.
+2. Write `average(numbers)` that returns `0` for an empty list instead of crashing.
+3. Write `shout(text, times=2)` that returns the text in capitals with `!` added `times` times.
+
+<details>
+<summary>Solutions</summary>
+
+```python
+# 1
+def is_leap_year(year):
+    return (year % 4 == 0 and year % 100 != 0) or year % 400 == 0
+
+for y in range(2000, 2031):
+    if is_leap_year(y):
+        print(y)
+
+# 2
+def average(numbers):
+    if not numbers:
+        return 0
+    return sum(numbers) / len(numbers)
+
+# 3
+def shout(text, times=2):
+    return text.upper() + "!" * times
+
+print(shout("hey"))        # HEY!!
+print(shout("hey", 4))     # HEY!!!!
+```
+
+</details>

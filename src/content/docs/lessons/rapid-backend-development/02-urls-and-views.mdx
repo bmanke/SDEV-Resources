@@ -1,0 +1,203 @@
+---
+title: "2. URLs and Views"
+description: "Route URLs to view functions, capture values from the path, read query strings and return different kinds of responses."
+difficulty: beginner
+readingTime: 14
+tags: [django, urls, views]
+sidebar:
+  order: 2
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Views and URLs are the heart of a Django app. The URL table says **which function runs** for each address, and the view
+function decides **what to send back**.
+
+## Sample data
+
+Until the database arrives in lesson 4, keep a few books in a Python list:
+
+```python title="books/views.py"
+from django.http import Http404, HttpResponse, JsonResponse
+
+BOOKS = [
+    {"id": 1, "title": "Dune", "author": "Frank Herbert", "year": 1965},
+    {"id": 2, "title": "Neuromancer", "author": "William Gibson", "year": 1984},
+    {"id": 3, "title": "Emma", "author": "Jane Austen", "year": 1815},
+]
+
+
+def home(request):
+    return HttpResponse("Welcome to Book Club")
+
+
+def book_list(request):
+    # request.GET holds the query string: /books/?q=dune
+    query = request.GET.get("q", "").strip().lower()
+    books = [b for b in BOOKS if query in b["title"].lower()]
+    return JsonResponse({"count": len(books), "books": books})
+
+
+def book_detail(request, book_id):
+    # book_id arrives already converted to an int by the URL pattern
+    for book in BOOKS:
+        if book["id"] == book_id:
+            return JsonResponse(book)
+    raise Http404("No such book")
+```
+
+## URL patterns
+
+```python title="books/urls.py"
+from django.urls import path
+
+from . import views
+
+app_name = "books"
+
+urlpatterns = [
+    path("", views.home, name="home"),
+    path("books/", views.book_list, name="book_list"),
+    path("books/<int:book_id>/", views.book_detail, name="book_detail"),
+]
+```
+
+Parts of a `path()`:
+
+1. The **route**: `books/<int:book_id>/`. Routes never start with a slash.
+2. The **view**: the function (or class-based view) to call.
+3. The **name**: a label you can use to build URLs without hard-coding them.
+
+### Path converters
+
+Angle brackets capture part of the URL and pass it to the view as an argument.
+
+| Converter | Matches | Python type |
+| --------- | ------- | ----------- |
+| `<int:id>` | `0`, `42` | `int` |
+| `<str:name>` | any text without `/` | `str` |
+| `<slug:slug>` | `my-first-post` | `str` |
+| `<uuid:token>` | a UUID | `UUID` |
+| `<path:rest>` | text including `/` | `str` |
+
+Django tries patterns **top to bottom** and uses the first match, so put specific routes (such as `books/new/`) before general ones (such as `books/<str:slug>/`). A request to `/books/abc/` matches nothing here, because `abc` is not an `int`.
+
+## The request object
+
+Every view receives an `HttpRequest`.
+
+| Attribute | Contains |
+| --------- | -------- |
+| `request.method` | `"GET"`, `"POST"`, ... |
+| `request.GET` | Query string values (`?q=dune`) |
+| `request.POST` | Submitted form data |
+| `request.FILES` | Uploaded files |
+| `request.user` | The logged-in user (or an anonymous user) |
+| `request.headers` | HTTP headers |
+| `request.path` | The URL path |
+
+```python
+def echo(request):
+    return JsonResponse({
+        "method": request.method,
+        "path": request.path,
+        "q": request.GET.get("q"),
+        "tags": request.GET.getlist("tag"),    # ?tag=a&tag=b
+    })
+```
+
+## Responses
+
+| Class | Use |
+| ----- | --- |
+| `HttpResponse(text)` | Plain text or HTML |
+| `JsonResponse(dict)` | JSON with the right content type |
+| `redirect(...)` | `302` redirect to a URL, route name or model |
+| `render(request, template, context)` | HTML from a template (next lesson) |
+| `Http404` | Raise it to produce a 404 page |
+
+You can set the status and headers yourself:
+
+```python
+return HttpResponse("Created", status=201)
+return JsonResponse({"error": "bad request"}, status=400)
+```
+
+## Redirects
+
+A redirect tells the browser to request a different URL. You can pass a route name and its arguments:
+
+```python
+from django.shortcuts import redirect
+
+
+def latest_book(request):
+    return redirect("books:book_detail", book_id=3)
+```
+
+Redirects are central to forms (lesson 7): after saving data you redirect so a refresh does not submit it twice.
+
+## Naming and reversing URLs
+
+Never write `/books/3/` by hand in your code. If the URL structure changes, every copy breaks. Use the route name instead.
+
+```python
+from django.urls import reverse
+
+reverse("books:book_detail", kwargs={"book_id": 3})   # '/books/3/'
+reverse("books:book_list")                            # '/books/'
+```
+
+In templates the equivalent is `{% url 'books:book_detail' book.id %}` (next lesson).
+
+## Limiting HTTP methods
+
+```python
+from django.views.decorators.http import require_http_methods
+
+
+@require_http_methods(["GET"])
+def book_list(request):
+    ...
+```
+
+Anything else (such as `POST`) receives a `405 Method Not Allowed`.
+
+## Trying it out
+
+Start the server and visit:
+
+- `/books/` shows all three books as JSON.
+- `/books/?q=du` filters to Dune.
+- `/books/2/` shows Neuromancer.
+- `/books/99/` shows the 404 page.
+
+<Aside type="caution" title="404 versus 500">
+A missing record is not a server error. Raise `Http404` so the browser receives a correct `404` and not a `500` that makes it look like your code crashed.
+</Aside>
+
+## Check yourself
+
+1. Add a route `authors/<str:name>/` that returns a JSON list of books by that author (case-insensitive).
+2. Why do we write `reverse("books:book_detail", ...)` and not `"/books/3/"`?
+3. What does `request.GET.get("page", 1)` return for `/books/` with no query string?
+
+<details>
+<summary>Answers</summary>
+
+```python
+# 1: views.py
+def books_by_author(request, name):
+    matches = [b for b in BOOKS if b["author"].lower() == name.lower()]
+    return JsonResponse({"author": name, "books": matches})
+
+# urls.py
+path("authors/<str:name>/", views.books_by_author, name="books_by_author"),
+```
+
+Note that `<str:name>` does not match slashes, so `/authors/Jane%20Austen/` works.
+
+2. If the URL layout changes, the name keeps working and Django rebuilds the path for you.
+3. `1` (the default). Query values are strings when present, so convert with `int()` before doing math.
+
+</details>

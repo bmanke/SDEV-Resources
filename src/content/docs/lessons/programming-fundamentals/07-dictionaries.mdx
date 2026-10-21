@@ -1,0 +1,188 @@
+---
+title: "7. Dictionaries"
+description: "Store data as key-value pairs, look things up quickly, and model records with nested data."
+difficulty: intermediate
+readingTime: 13
+tags: [python, dictionaries]
+sidebar:
+  order: 7
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A **dictionary** (`dict`) stores **key-value pairs**. Instead of asking for "item number 2", you ask for the value that
+goes with a key, like looking up a word in a dictionary.
+
+## Creating and reading
+
+```python
+pizza_prices = {
+    "margherita": 12.50,
+    "pepperoni": 14.00,
+    "veggie": 13.25,
+}
+
+print(pizza_prices["pepperoni"])       # 14.0
+print(len(pizza_prices))               # 3
+print("veggie" in pizza_prices)        # True. `in` checks the KEYS.
+```
+
+Asking for a key that does not exist raises a `KeyError`. The safer way is `.get`, which returns a default instead:
+
+```python
+print(pizza_prices.get("hawaiian"))            # None
+print(pizza_prices.get("hawaiian", "n/a"))     # n/a
+```
+
+Keys must be unique and unchangeable (strings, numbers and tuples work). Values can be anything.
+
+## Adding, changing and deleting
+
+```python
+menu = {"burger": 9.0}
+
+menu["fries"] = 4.0          # add a new key
+menu["burger"] = 9.5         # change an existing key
+menu.update({"soda": 2.5, "fries": 4.5})   # several at once
+
+del menu["soda"]             # delete a key (KeyError if missing)
+price = menu.pop("fries", 0) # remove and return, with a default if missing
+print(menu)                  # {'burger': 9.5}
+```
+
+## Looping
+
+```python
+stock = {"apples": 5, "pears": 0, "plums": 12}
+
+for fruit in stock:                          # keys
+    print(fruit)
+
+for count in stock.values():                 # values
+    print(count)
+
+for fruit, count in stock.items():           # both at once
+    print(f"{fruit}: {count}")
+
+print(list(stock.keys()))                    # ['apples', 'pears', 'plums']
+```
+
+## Counting with a dictionary
+
+This is one of the most useful patterns in programming.
+
+```python title="word_count.py"
+sentence = "the cat and the hat and the bat"
+counts = {}
+
+for word in sentence.split():
+    counts[word] = counts.get(word, 0) + 1     # start at 0 if the word is new
+
+print(counts)    # {'the': 3, 'cat': 1, 'and': 2, 'hat': 1, 'bat': 1}
+
+# Sort by count, biggest first
+ranked = sorted(counts.items(), key=lambda pair: pair[1], reverse=True)
+for word, n in ranked:
+    print(word, n)
+```
+
+## Nested data
+
+Real data has structure. Dictionaries can hold lists and other dictionaries.
+
+```python
+student = {
+    "name": "Mia",
+    "grades": [88, 92, 79],
+    "address": {"city": "Edmonton", "province": "AB"},
+}
+
+print(student["address"]["city"])                 # Edmonton
+student["grades"].append(95)
+print(sum(student["grades"]) / len(student["grades"]))
+```
+
+A **list of dictionaries** models a table. Each dictionary is a row:
+
+```python
+people = [
+    {"name": "Mia", "birthday": "03-14"},
+    {"name": "Noor", "birthday": "07-02"},
+]
+
+for person in people:
+    print(f"{person['name']} was born on {person['birthday']}")
+
+# Look up by searching
+for person in people:
+    if person["name"] == "Noor":
+        print(person["birthday"])
+```
+
+Use a different quote style inside an f-string (`person['name']` inside `f"..."`).
+
+## Building a burger: a worked example
+
+```python title="burger_builder.py"
+PRICES = {"patty": 5.0, "cheese": 1.0, "bacon": 2.0, "lettuce": 0.5}
+
+order = []
+print("Toppings:", ", ".join(PRICES))
+
+while True:
+    item = input("Add a topping (or 'done'): ").lower()
+    if item == "done":
+        break
+    if item in PRICES:
+        order.append(item)
+    else:
+        print(f"Sorry, we don't have {item}.")
+
+total = sum(PRICES[item] for item in order)
+print(f"Your burger: {', '.join(order)}")
+print(f"Total: ${total:.2f}")
+```
+
+<Aside type="tip" title="List or dictionary?">
+Use a list when order and position matter ("the third song"). Use a dictionary when you look things up by a name or ID ("the price of pepperoni").
+</Aside>
+
+## Check yourself
+
+1. Build a birthday book: ask for names and birthdays until `done`, then look up names the user types.
+2. Count how many times each letter appears in a word.
+3. Given `inventory = {"bolts": 120, "nuts": 80, "screws": 0}`, print only the items that are out of stock.
+
+<details>
+<summary>Solutions</summary>
+
+```python
+# 1
+birthdays = {}
+while True:
+    name = input("Name (or 'done'): ")
+    if name == "done":
+        break
+    birthdays[name] = input("Birthday: ")
+
+while True:
+    who = input("Look up (or 'quit'): ")
+    if who == "quit":
+        break
+    print(birthdays.get(who, "I don't know that person."))
+
+# 2
+word = input("Word: ").lower()
+letters = {}
+for ch in word:
+    letters[ch] = letters.get(ch, 0) + 1
+print(letters)
+
+# 3
+inventory = {"bolts": 120, "nuts": 80, "screws": 0}
+for item, qty in inventory.items():
+    if qty == 0:
+        print(item, "is out of stock")
+```
+
+</details>

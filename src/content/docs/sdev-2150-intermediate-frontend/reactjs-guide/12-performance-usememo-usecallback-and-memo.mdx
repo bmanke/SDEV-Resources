@@ -1,0 +1,190 @@
+---
+title: "12. Performance: useMemo, useCallback and memo"
+description: "See why components re-render, skip unnecessary work with memo, useCallback and useMemo, and learn when not to bother."
+difficulty: intermediate
+readingTime: 20
+tags: [react, performance, usememo, usecallback, memo, react-compiler]
+sidebar:
+  order: 12
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+React is fast by default, and for most apps you do not need this lesson's tools. They exist for the cases where a screen is genuinely slow. Still, `useMemo` and `useCallback` are on every React roadmap, you will meet them in other people's code, and the idea behind them (stable identity) explains many React surprises.
+
+<Aside type="caution" title="Measure first">
+Do not wrap everything in `useMemo` and `useCallback` "just in case". Memoizing costs memory and makes code harder to read, and often changes nothing. Find a real slowdown first with the **React DevTools Profiler** or the browser's Performance tab, fix that, then measure again.
+</Aside>
+
+## Why components re-render
+
+From Lesson 5: a component re-renders when its **state changes** or its **parent re-renders**. The second rule means that when `App` re-renders, every child re-renders too, even if its props are exactly the same.
+
+You can watch this happen. Add a temporary log to the top of `MovieCard`:
+
+```jsx
+function MovieCard({ title /* ...other props */ }) {
+  console.log('render', title);
+  // ...
+}
+```
+
+Type one letter in the search box. Each keystroke changes `query` in `App`, `App` re-renders, `MovieList` re-renders, and **all eight cards render again** even though none of their data changed. With eight cards that costs nothing. With thousands of complex cards it could be noticeable.
+
+## React.memo: skip a render when props did not change
+
+Wrapping a component in `memo` tells React: "If this component's props are the same as last time, reuse the previous result."
+
+```jsx title="src/components/MovieCard.jsx"
+import { memo } from 'react';
+import styles from './MovieCard.module.css';
+
+function MovieCard({ id, title, year, genre = 'Unknown', rating, isFavorite, onToggleFavorite, onRemove }) {
+  // ...same JSX as before
+}
+
+export default memo(MovieCard);
+```
+
+`memo` compares each prop with `===`. Strings, numbers and booleans compare by value, so they are fine. **Functions, objects and arrays are compared by identity**, and a new one is created on every render of the parent. In `App`, `toggleFavorite` is declared inside the component, so it is a brand-new function each render. To `memo`, that looks like a changed prop, and the optimization does nothing.
+
+## useCallback: keep the same function
+
+`useCallback(fn, dependencies)` returns the **same function** as long as the dependencies have not changed.
+
+```jsx title="src/App.jsx (changes)"
+import { useCallback, useMemo, useState } from 'react';
+
+// ...
+
+const toggleFavorite = useCallback(
+  (id) => {
+    setFavoriteIds((ids) =>
+      ids.includes(id) ? ids.filter((existing) => existing !== id) : [...ids, id],
+    );
+  },
+  [setFavoriteIds],
+);
+
+const handleRemove = useCallback(
+  (id) => {
+    removeMovie(id);
+    setFavoriteIds((ids) => ids.filter((existing) => existing !== id));
+  },
+  [removeMovie, setFavoriteIds],
+);
+```
+
+Two details make this work:
+
+- `setFavoriteIds` comes from `useState` inside `useLocalStorage`, and React guarantees that setter functions never change. Using the updater form (`(ids) => ...`) means the function does not need to read `favoriteIds`, so it has no changing dependencies.
+- `removeMovie` must be stable too. It comes from `useMovies`, so fix it there. `dispatch` never changes, so a callback that uses it can have an empty dependency list.
+
+```js title="src/hooks/useMovies.js (changes)"
+import { useCallback, useEffect, useReducer } from 'react';
+
+// ...inside useMovies, replacing the old return statement:
+
+// dispatch never changes, so these functions keep the same identity between renders
+const addMovie = useCallback((movie) => dispatch({ type: 'added', movie }), []);
+const removeMovie = useCallback((id) => dispatch({ type: 'removed', id }), []);
+
+return { movies: state.items, status: state.status, error: state.error, addMovie, removeMovie };
+```
+
+Now when the search text changes, `App` re-renders but every prop of every `MovieCard` is identical, so `memo` skips them. In a test run of this project:
+
+| Action | Card renders without `memo` | Card renders with `memo` and stable callbacks |
+| ------ | --------------------------- | --------------------------------------------- |
+| Page loads | 8 | 8 |
+| Type one letter in the search box | 8 more | 0 |
+| Toggle one favorite | 8 more | 1 (only the card that changed) |
+
+You can reproduce this with the temporary `console.log` from above.
+
+## useMemo: remember a calculated value
+
+`useMemo(() => calculation, dependencies)` runs the calculation once and returns the stored result until a dependency changes.
+
+```jsx
+const visibleMovies = useMemo(() => {
+  const needle = debouncedQuery.trim().toLowerCase();
+  return movies.filter(
+    (movie) =>
+      (genre === 'All' || movie.genre === genre) && movie.title.toLowerCase().includes(needle),
+  );
+}, [movies, genre, debouncedQuery]);
+```
+
+This helps in two situations:
+
+1. **The calculation is expensive** (filtering and sorting tens of thousands of items). Filtering eight movies is not expensive, so here it only demonstrates the syntax.
+2. **You need a stable array or object** to pass to a memoized child or to use as an effect dependency. Without `useMemo`, `visibleMovies` would be a new array each render.
+
+| Hook | Remembers | Typical use |
+| ---- | --------- | ----------- |
+| `memo(Component)` | The rendered result, per props | Skip re-rendering a child |
+| `useCallback(fn, deps)` | A function | Pass a stable handler to a memoized child or an effect |
+| `useMemo(() => value, deps)` | Any calculated value | Skip expensive work, or keep a stable object |
+
+`useCallback(fn, deps)` is just a shorthand for `useMemo(() => fn, deps)`.
+
+### Common mistakes
+
+- **Memoizing without `memo`.** `useCallback` alone does nothing useful unless the function goes to a memoized component or an effect dependency.
+- **Missing dependencies.** If the function uses `genre` but you list `[]`, it keeps seeing the old value. Include everything the function reads, or use updater functions like the examples above.
+- **Inline objects.** `style={{ color: 'red' }}` or `options={[1, 2]}` creates a new object every render and defeats `memo`. Move constant values outside the component or memoize them.
+- **Using it everywhere.** Each hook adds work, so it only pays off where the skipped work is bigger than the check.
+
+## The React Compiler
+
+Writing `memo`, `useMemo` and `useCallback` by hand is repetitive, so the React team built the **React Compiler**, a build-time tool that adds this memoization automatically to components that follow the rules of React. It is designed for React 19 and also supports 17 and 18. The Vite starter template leaves it off because it slows down builds, so you opt in.
+
+With Vite 8 and `@vitejs/plugin-react` 6, install the Babel integration and the compiler:
+
+```sh
+npm install -D @rolldown/plugin-babel babel-plugin-react-compiler
+```
+
+```js title="vite.config.js"
+import react, { reactCompilerPreset } from '@vitejs/plugin-react';
+import babel from '@rolldown/plugin-babel';
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  plugins: [
+    react(),
+    babel({ presets: [reactCompilerPreset()] }),
+  ],
+});
+```
+
+See the [official installation guide](https://react.dev/learn/react-compiler/installation) for other setups. With the compiler on, you rarely need to write these hooks yourself, but understanding them still matters for reading existing code and for the cases the compiler cannot optimise.
+
+## Other ways to keep an app fast
+
+- **Render less.** Paginate or virtualise very long lists (render only the rows on screen).
+- **Load less up front.** `React.lazy` and `Suspense` split rarely used pages into separate downloads.
+- **Keep state close to where it is used.** State high in the tree re-renders more components.
+- **Avoid expensive work in render.** Move it to an effect, an event handler, or `useMemo`.
+- **Use stable keys** (Lesson 8) so React reuses DOM nodes.
+
+## Check yourself
+
+1. Why does a `memo`-wrapped component still re-render if its parent passes `onClick={() => doThing(id)}`?
+2. Write a `useCallback` for `function handleSelect(id) { setSelectedId(id); }`. What goes in the dependency array?
+3. When is it reasonable to use `useMemo` for `items.filter(...)`?
+4. You wrapped a child in `memo`, but it still re-renders every time. Name two things to check.
+
+<details>
+<summary>Answers</summary>
+
+1. The arrow function is a new function on every render of the parent, so the prop is never `===` to the previous one. Memoize the handler with `useCallback`, or pass `id` and a stable function and call it inside the child.
+2. ```jsx
+   const handleSelect = useCallback((id) => setSelectedId(id), []);
+   ```
+   The array is empty because `setSelectedId` is guaranteed stable, so the function does not depend on anything that changes.
+3. When the filter is expensive (a very large list), or when the resulting array must keep the same identity because it is passed to a memoized child or used in an effect dependency list. For a short list it is unnecessary.
+4. Check whether any prop is an inline function, object or array created during the parent's render (it changes identity every time), and whether the component reads a context whose value changes, which re-renders it regardless of `memo`.
+
+</details>

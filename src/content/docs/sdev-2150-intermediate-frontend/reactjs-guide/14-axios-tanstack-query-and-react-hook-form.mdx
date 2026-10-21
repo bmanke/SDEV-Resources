@@ -1,0 +1,426 @@
+---
+title: "14. Axios, TanStack Query and React Hook Form"
+description: "Replace hand-written data fetching with Axios and TanStack Query, and replace hand-written form state with React Hook Form."
+difficulty: intermediate
+readingTime: 28
+tags: [react, axios, tanstack-query, react-hook-form, zod, forms]
+sidebar:
+  order: 14
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+The roadmap's popular-packages list includes three tools that solve problems you have already met in this guide:
+
+| Package | Problem it solves | Replaces |
+| ------- | ----------------- | -------- |
+| **Axios** | Making HTTP requests with less boilerplate | The `fetch` code from Lesson 9 |
+| **TanStack Query** | Loading, caching and updating data from a server | The `useEffect` and reducer in `useMovies` |
+| **React Hook Form** | Building forms with validation | The hand-written form state from Lesson 6 |
+
+```sh
+npm install axios @tanstack/react-query react-hook-form
+```
+
+## Part 1: Axios
+
+Axios is an HTTP client. It does what `fetch` does with a few conveniences:
+
+| | `fetch` | Axios |
+| --- | ------- | ----- |
+| Parses JSON | Call `response.json()` yourself | `response.data` is already parsed |
+| HTTP errors (404, 500) | Resolves, so you check `response.ok` | Rejects automatically |
+| Timeouts | Needs an `AbortController` | `timeout: 8000` option |
+| Shared settings | Repeat them in every call | One configured **instance** |
+| Hooks into every request | Wrap `fetch` yourself | **Interceptors** |
+
+Fetch is built into the browser and is perfectly fine for small projects. Axios earns its place when you have many requests that share a base URL, headers or error handling.
+
+Create one configured instance for the app, and put each request in its own function. Keeping this in `src/api/` means components never need to know which HTTP library you use.
+
+```js title="src/api/movies.js"
+import axios from 'axios';
+
+export const api = axios.create({
+  baseURL: import.meta.env.BASE_URL,
+  timeout: 8000,
+});
+
+// Turn every failure into a plain Error with a readable message
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error.response?.status;
+    const message = status ? `Request failed with status ${status}` : error.message;
+    return Promise.reject(new Error(message));
+  },
+);
+
+export async function fetchMovies() {
+  const { data } = await api.get('movies.json');
+  return data;
+}
+```
+
+- `baseURL` is added in front of every path, so a deployed site under `/SDEV-Resources/` still finds `movies.json`.
+- The **response interceptor** runs for every response. Here it converts any failure into an `Error` whose message is safe to show on screen. An HTTP error has `error.response.status`, while a network failure has no response at all, so the code handles both.
+- `fetchMovies` returns the data and nothing else. With a real server you would add siblings such as `createMovie(movie)` (`api.post('movies', movie)`) and `deleteMovie(id)` (``api.delete(`movies/${id}`)``).
+
+Real APIs often need a token. An interceptor on the **request** is the usual place to add it:
+
+```js
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+```
+
+<Aside type="caution" title="Never put secrets in a React app">
+Everything in your front-end bundle is public. An API key included in the code can be read by anyone who opens the browser's developer tools. Keep real secrets on a server and have the browser call that server.
+</Aside>
+
+## Part 2: TanStack Query
+
+Look at what `useMovies` does today: it tracks loading and error state, aborts requests, and stores the result. Now imagine ten components that all need movies. Each would fetch its own copy, none would know when the data is outdated, and you would write the same loading logic repeatedly.
+
+TanStack Query (formerly React Query) manages **server state**: data that lives on a server, is fetched asynchronously, and can change without you knowing. It gives you:
+
+- **Caching.** The same data is shared by every component that asks for it.
+- **De-duplication.** Ten components asking at once cause one request.
+- **Loading and error states** without writing them by hand.
+- **Automatic retries** with exponential backoff, and background refreshing.
+- **Mutations** for changing server data, with a way to update the cache afterwards.
+
+Server state is different from the state you have used so far (**client state**: whether a menu is open, what is typed in a field). Keep each kind in the right tool.
+
+### Step 1: provide a client
+
+`QueryClient` holds the cache. Create it once, outside any component, and provide it to the app.
+
+```jsx title="src/main.jsx"
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import './index.css';
+import App from './App.jsx';
+import ThemeProvider from './context/ThemeProvider.jsx';
+
+const queryClient = new QueryClient();
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
+        <ThemeProvider>
+          <App />
+        </ThemeProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
+  </StrictMode>,
+);
+```
+
+### Step 2: read data with useQuery
+
+`useQuery` needs two things:
+
+- **`queryKey`**: an array that identifies the data. Same key, same cache entry. Include every variable the request depends on, for example `['movie', id]`.
+- **`queryFn`**: a function that returns a promise of the data.
+
+```js title="src/hooks/useMovies.js"
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchMovies } from '../api/movies.js';
+
+export const moviesKey = ['movies'];
+
+export default function useMovies() {
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: moviesKey,
+    queryFn: fetchMovies,
+    staleTime: 60_000, // treat the data as fresh for one minute
+  });
+
+  const add = useMutation({
+    mutationFn: async (movie) => {
+      // A real app would call: const { data } = await api.post('movies', movie);
+      return { ...movie, id: Date.now() }; // pretend the server assigned the id
+    },
+    onSuccess: (created) =>
+      queryClient.setQueryData(moviesKey, (old = []) => [...old, created]),
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id) => id, // a real app would call api.delete(`movies/${id}`)
+    onSuccess: (id) =>
+      queryClient.setQueryData(moviesKey, (old = []) => old.filter((movie) => movie.id !== id)),
+  });
+
+  return {
+    movies: query.data ?? [],
+    isPending: query.isPending,
+    isError: query.isError,
+    error: query.error,
+    addMovie: add.mutate,
+    removeMovie: remove.mutate,
+  };
+}
+```
+
+The component-facing shape is nearly the same as before, so components change very little. You can now delete `src/state/moviesReducer.js`, because the cache replaces it.
+
+Update the two places that use the hook. Both read the same cache entry, so `Layout` no longer needs to load anything.
+
+```jsx title="src/components/Layout.jsx"
+import { Outlet } from 'react-router';
+import Header from './Header.jsx';
+
+export default function Layout() {
+  return (
+    <>
+      <Header />
+      <Outlet />
+    </>
+  );
+}
+```
+
+```jsx title="src/pages/HomePage.jsx (changes)"
+import { useSearchParams } from 'react-router';       // remove useOutletContext
+import useMovies from '../hooks/useMovies.js';        // add
+
+export default function HomePage() {
+  const { movies, isPending, isError, error, addMovie, removeMovie } = useMovies();
+  // ...
+
+  let content;
+  if (isPending) {
+    content = <p>Loading movies...</p>;
+  } else if (isError) {
+    content = <p role="alert">Could not load movies: {error.message}</p>;
+  } else {
+    content = (/* the MovieList, unchanged */);
+  }
+  // ...
+}
+```
+
+```jsx title="src/pages/MovieDetailPage.jsx (changes)"
+import { Link, useNavigate, useParams } from 'react-router';   // remove useOutletContext
+import useMovies from '../hooks/useMovies.js';                  // add
+
+export default function MovieDetailPage() {
+  const { id } = useParams();
+  const { movies, isPending } = useMovies();
+  const navigate = useNavigate();
+
+  if (isPending) return <p>Loading movie...</p>;
+  // ...the rest is unchanged
+}
+```
+
+Open the app, click a movie and press back. The detail page does not show "Loading" and the browser does not request `movies.json` again, because both pages read the same cached entry.
+
+### The status flags
+
+| Property | Meaning |
+| -------- | ------- |
+| `isPending` | There is no data yet (the first load) |
+| `isError` / `error` | The request failed after all retries |
+| `isFetching` | A request is running right now, including background refreshes |
+| `data` | The latest successful result |
+| `refetch()` | Ask for fresh data on demand |
+
+In TanStack Query v5, `isPending` means "no data yet". The older `isLoading` flag now means "pending and currently fetching". The `cacheTime` option was renamed `gcTime`, and every hook takes a single options object. If you follow an older tutorial, expect these differences.
+
+### Fresh and stale data
+
+Cached data is either **fresh** (use it as is) or **stale** (use it, but refresh in the background). The [TanStack Query docs](https://tanstack.com/query/latest/docs/framework/react/guides/important-defaults) list the defaults:
+
+- Cached data is considered stale immediately (`staleTime` defaults to 0).
+- Inactive queries are garbage collected after 5 minutes (`gcTime`).
+- Failed queries are retried 3 times with exponential backoff before an error is shown.
+- Stale queries refetch automatically when a new component mounts, when the window regains focus, and when the network reconnects.
+
+The example sets `staleTime: 60_000`, so for one minute the cached list is used without any request. Raise it for data that rarely changes and lower it for data that changes often.
+
+### Mutations: changing data
+
+`useMutation` is for creating, updating and deleting. It gives you `mutate(variables)` and state flags such as `isPending` and `isError`. After a mutation succeeds, the cache must be brought up to date. There are two common ways:
+
+- **`queryClient.setQueryData`** writes the new value into the cache directly. That is what this project does, because `movies.json` is a static file and there is no server to ask.
+- **`queryClient.invalidateQueries({ queryKey })`** marks the data as stale and refetches it. With a real API, this is the usual choice:
+
+```js
+const add = useMutation({
+  mutationFn: (movie) => api.post('movies', movie),
+  onSuccess: () => queryClient.invalidateQueries({ queryKey: moviesKey }),
+});
+```
+
+<Aside type="tip" title="Query devtools">
+The package `@tanstack/react-query-devtools` adds a panel that shows every query, whether it is fresh or stale, and its cached data. It is very helpful while you are learning how the cache behaves.
+</Aside>
+
+## Part 3: React Hook Form
+
+The form from Lesson 6 kept every field in `useState` and re-rendered on every keystroke. It also had no validation. React Hook Form reads values from the inputs when needed, so typing does not re-render the form, and it provides validation, error messages and submission handling.
+
+The main pieces:
+
+| Piece | Purpose |
+| ----- | ------- |
+| `useForm({ defaultValues })` | Creates the form and returns the helpers below |
+| `register('name', rules)` | Connects an input to the form and attaches validation rules |
+| `handleSubmit(onSubmit)` | Validates first; calls `onSubmit` with the values only when everything is valid |
+| `formState.errors` | The current error for each field |
+| `reset()` | Returns the fields to their default values |
+
+```jsx title="src/components/AddMovieForm.jsx"
+import { useForm } from 'react-hook-form';
+import { genres } from '../data/movies.js';
+
+const defaultValues = { title: '', year: 2024, genre: 'Drama', rating: 7 };
+
+export default function AddMovieForm({ onAdd }) {
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm({ defaultValues });
+
+  function onSubmit(values) {
+    onAdd({ ...values, title: values.title.trim() });
+    reset();
+  }
+
+  return (
+    <form className="add-movie" onSubmit={handleSubmit(onSubmit)} noValidate>
+      <h2>Add a movie</h2>
+
+      <label htmlFor="title">Title</label>
+      <input
+        id="title"
+        aria-invalid={errors.title ? 'true' : 'false'}
+        {...register('title', {
+          required: 'Title is required',
+          minLength: { value: 2, message: 'Use at least 2 characters' },
+          validate: (value) => value.trim() !== '' || 'Title cannot be blank',
+        })}
+      />
+      {errors.title && <p role="alert">{errors.title.message}</p>}
+
+      <label htmlFor="year">Year</label>
+      <input
+        id="year"
+        type="number"
+        {...register('year', {
+          valueAsNumber: true,
+          min: { value: 1888, message: 'Year must be 1888 or later' },
+          max: { value: 2100, message: 'Year must be 2100 or earlier' },
+        })}
+      />
+      {errors.year && <p role="alert">{errors.year.message}</p>}
+
+      <label htmlFor="genre">Genre</label>
+      <select id="genre" {...register('genre')}>
+        {genres.map((genre) => (
+          <option key={genre}>{genre}</option>
+        ))}
+      </select>
+
+      <label htmlFor="rating">Rating (0 to 10)</label>
+      <input
+        id="rating"
+        type="number"
+        step="0.1"
+        {...register('rating', {
+          valueAsNumber: true,
+          min: { value: 0, message: 'Rating cannot be below 0' },
+          max: { value: 10, message: 'Rating cannot be above 10' },
+        })}
+      />
+      {errors.rating && <p role="alert">{errors.rating.message}</p>}
+
+      <button type="submit">Add movie</button>
+    </form>
+  );
+}
+```
+
+Points worth noticing:
+
+- **`{...register('title', rules)}`** spreads the props the form needs (`name`, `onChange`, `onBlur`, `ref`) onto the input. The input stays uncontrolled, which is why typing is fast.
+- **`valueAsNumber: true`** converts the text to a number, so `values.year` is `2024` and not `'2024'`.
+- **Rules** are the built-in ones: `required`, `min`, `max`, `minLength`, `maxLength`, `pattern`, and `validate` for your own logic (return `true` or an error message).
+- **`noValidate`** turns off the browser's own pop-up bubbles so your messages are shown instead.
+- **Accessibility.** `role="alert"` makes screen readers announce an error as it appears, and `aria-invalid` marks the field. Keep the `label` and `htmlFor` pairs from Lesson 6.
+- Validation runs when the form is submitted. After the first failed submit, it re-validates as the user types, so errors clear as soon as they are fixed.
+- The old `value` and `onChange` pairs and the `useState` object are gone, and `onSubmit` is only called with valid data.
+
+### Schema validation with Zod (optional)
+
+When forms get large, listing rules in each `register` call becomes noisy. A **schema** puts all the rules in one object. Zod is a popular schema library, and `@hookform/resolvers` connects it to React Hook Form.
+
+```sh
+npm install zod @hookform/resolvers
+```
+
+```jsx
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+
+const movieSchema = z.object({
+  title: z.string().trim().min(2, 'Use at least 2 characters'),
+  year: z.number({ error: 'Enter a year' }).int().min(1888, 'Year must be 1888 or later').max(2100),
+  genre: z.string(),
+  rating: z.number({ error: 'Enter a rating' }).min(0, 'Rating cannot be below 0').max(10, 'Rating cannot be above 10'),
+});
+
+const { register, handleSubmit, formState: { errors } } = useForm({
+  resolver: zodResolver(movieSchema),
+  defaultValues: { title: '', year: 2024, genre: 'Drama', rating: 7 },
+});
+```
+
+Keep `valueAsNumber: true` on the number inputs. The same schema can validate data on a server later, which is a major reason people use it. This guide keeps the built-in rules in the project so there is nothing extra to install.
+
+## Try it
+
+<Steps>
+
+1. Run the app and open the Network tab in your browser's developer tools. Reload and confirm `movies.json` is requested once.
+2. Click a movie and go back. No new request appears while the data is fresh.
+3. Submit the form empty. The title error appears, and the list is unchanged.
+4. Type `a` as the title and submit. The message changes to "Use at least 2 characters".
+5. Enter a rating of 11 and submit. The rating message appears.
+6. Fix the fields and submit. The movie is added and the form resets.
+
+</Steps>
+
+## Check yourself
+
+1. What is the difference between client state and server state? Give an example of each from Filmshelf.
+2. Why must `queryKey` include the id for a query like `['movie', id]`?
+3. What does `isPending` mean in TanStack Query v5?
+4. Add a validation rule to the title input that rejects titles longer than 60 characters.
+5. Why does `valueAsNumber: true` matter on a number input?
+
+<details>
+<summary>Answers</summary>
+
+1. Client state belongs to the browser session and the interface, such as the search text or the dark-mode choice. Server state lives on a server and can change outside the app, such as the movie list. Use `useState` and context for the first and TanStack Query for the second.
+2. The key identifies a cache entry. If the id is not part of it, every movie would share one entry, and the query would not refetch when the id changes.
+3. The query has no data yet, which is the first load. It is not true during a background refresh when cached data exists.
+4. ```jsx
+   maxLength: { value: 60, message: 'Use at most 60 characters' },
+   ```
+   Add it to the options object of `register('title', ...)`.
+5. HTML inputs always give strings. Without it, `year` would be `'2024'`, so number comparisons and sorting would behave unexpectedly. With it, you get a real number (or `NaN` if the field is empty).
+
+</details>

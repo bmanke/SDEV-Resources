@@ -1,0 +1,248 @@
+---
+title: "3. Templates"
+description: "Generate HTML with Django's template language: variables, tags, filters, inheritance and static files."
+difficulty: beginner
+readingTime: 15
+tags: [django, templates, html]
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Returning JSON is fine for an API, but websites need HTML. Writing HTML inside Python strings gets ugly fast, so Django
+uses **templates**: HTML files with placeholders and a little logic.
+
+## Configure the template folder
+
+Create a `templates` folder at the project root and tell Django where it is.
+
+```python title="bookclub/settings.py (excerpt)"
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [BASE_DIR / 'templates'],        # project-wide templates
+        'APP_DIRS': True,                        # also look in each app's templates/ folder
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+```
+
+## Rendering a template from a view
+
+`render` combines a request, a template name and a **context** dictionary:
+
+```python title="books/views.py"
+from django.http import Http404, HttpResponse
+from django.shortcuts import render
+
+BOOKS = [
+    {"id": 1, "title": "Dune", "author": "Frank Herbert", "year": 1965},
+    {"id": 2, "title": "Neuromancer", "author": "William Gibson", "year": 1984},
+    {"id": 3, "title": "Emma", "author": "Jane Austen", "year": 1815},
+]
+
+
+def home(request):
+    return render(request, "books/home.html", {"message": "Welcome to Book Club"})
+
+
+def book_list(request):
+    query = request.GET.get("q", "").strip()
+    books = [b for b in BOOKS if query.lower() in b["title"].lower()]
+    return render(request, "books/book_list.html", {"books": books, "query": query})
+
+
+def book_detail(request, book_id):
+    for book in BOOKS:
+        if book["id"] == book_id:
+            return render(request, "books/book_detail.html", {"book": book})
+    raise Http404("No such book")
+```
+
+## Template syntax
+
+There are three kinds of markup:
+
+| Syntax | Name | Example |
+| ------ | ---- | ------- |
+| `{{ ... }}` | Variable | `{{ book.title }}` |
+| `{% ... %}` | Tag (logic) | `{% for book in books %}` |
+| `{# ... #}` | Comment | `{# not sent to the browser #}` |
+
+### Variables and dot lookups
+
+`{{ book.title }}` works for dictionary keys, object attributes, methods without arguments, and list indexes (`books.0`).
+If something is missing the output is an empty string, never an error.
+
+### Filters
+
+Filters change a value. They are chained with a pipe.
+
+```jinja
+{{ book.title|upper }}
+{{ book.title|truncatechars:20 }}
+{{ query|default:"nothing" }}
+{{ books|length }} book{{ books|length|pluralize }}
+{{ book.published|date:"F j, Y" }}
+{{ description|linebreaks }}
+```
+
+### Tags
+
+```jinja
+{% if books %}
+  <p>{{ books|length }} found</p>
+{% elif query %}
+  <p>No results for {{ query }}</p>
+{% else %}
+  <p>Search for something</p>
+{% endif %}
+
+{% for book in books %}
+  <li>{{ forloop.counter }}. {{ book.title }}</li>
+{% empty %}
+  <li>No books yet</li>
+{% endfor %}
+```
+
+`forloop.counter`, `forloop.first` and `forloop.last` are available inside a loop, and `{% empty %}` runs when the list is empty.
+
+<Aside type="tip" title="Automatic escaping">
+Django escapes variables by default, so a title like `<script>alert(1)</script>` is shown as text, not run. This blocks most cross-site scripting. Only use `|safe` for HTML you wrote yourself, never for user input.
+</Aside>
+
+## Template inheritance
+
+Most pages share a header, navigation and footer. Define them once in a **base template** with named blocks, and let pages fill in the blocks.
+
+```jinja title="templates/base.html"
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Book Club{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/site.css' %}">
+</head>
+<body>
+  <header>
+    <a class="brand" href="{% url 'books:home' %}">Book Club</a>
+    <nav>
+      <a href="{% url 'books:book_list' %}">Books</a>
+    </nav>
+  </header>
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>Built with Django</footer>
+</body>
+</html>
+```
+
+```jinja title="books/templates/books/home.html"
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>{{ message }}</h1>
+  <p><a href="{% url 'books:book_list' %}">Browse the books</a></p>
+{% endblock %}
+```
+
+```jinja title="books/templates/books/book_list.html"
+{% extends "base.html" %}
+
+{% block title %}Books | Book Club{% endblock %}
+
+{% block content %}
+  <h1>Books</h1>
+
+  <form method="get">
+    <input type="search" name="q" value="{{ query }}" placeholder="Search titles">
+    <button type="submit">Search</button>
+  </form>
+
+  <ul>
+    {% for book in books %}
+      <li>
+        <a href="{% url 'books:book_detail' book.id %}">{{ book.title }}</a>
+        by {{ book.author }} ({{ book.year }})
+      </li>
+    {% empty %}
+      <li>No books found.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}
+```
+
+```jinja title="books/templates/books/book_detail.html"
+{% extends "base.html" %}
+
+{% block title %}{{ book.title }} | Book Club{% endblock %}
+
+{% block content %}
+  <h1>{{ book.title }}</h1>
+  <p>by {{ book.author }}, {{ book.year }}</p>
+  <p><a href="{% url 'books:book_list' %}">&larr; All books</a></p>
+{% endblock %}
+```
+
+Notice the folder name `books/templates/books/`. Django merges every app's `templates` folder into one namespace, so the inner
+`books/` folder prevents two apps' `home.html` files from colliding.
+
+## Static files
+
+CSS, JavaScript and images that ship with your code are **static files**. Put them in a `static` folder inside the app (or project-wide through `STATICFILES_DIRS`).
+
+```python title="bookclub/settings.py (excerpt)"
+STATIC_URL = 'static/'
+STATICFILES_DIRS = [BASE_DIR / 'static']      # project-wide static folder
+```
+
+```css title="static/css/site.css"
+body { font-family: system-ui, sans-serif; margin: 0; line-height: 1.5; }
+header { display: flex; justify-content: space-between; padding: 1rem 2rem; background: #1f2937; }
+header a { color: white; text-decoration: none; margin-right: 1rem; }
+main { max-width: 48rem; margin: 2rem auto; padding: 0 1rem; }
+.errorlist { color: #b91c1c; padding-left: 1rem; }
+.messages { list-style: none; padding: 0; }
+.messages li { padding: .5rem 1rem; margin-bottom: .5rem; background: #ecfdf5; border-left: 4px solid #10b981; }
+.tag { display: inline-block; padding: .1rem .6rem; margin-right: .3rem; border-radius: 999px; background: #e5e7eb; font-size: .85rem; }
+form.inline { display: inline; }
+header form.inline button { background: none; border: 0; color: white; cursor: pointer; font: inherit; }
+footer { text-align: center; color: #6b7280; padding: 2rem; }
+```
+
+In templates, `{% load static %}` then `{% static 'css/site.css' %}` generates the correct URL, which also keeps working in production.
+
+## Including reusable pieces
+
+```jinja
+{% include "books/_book_card.html" with book=book %}
+```
+
+Prefix partial templates with an underscore as a convention.
+
+## Check yourself
+
+1. Add a `{% block extra_head %}{% endblock %}` to `base.html` so a page can add its own `<style>`.
+2. Display `Showing 3 books` (with correct singular or plural) on the list page.
+3. Why does `{{ book.title }}` print nothing when the template has a typo like `{{ book.titel }}`?
+
+<details>
+<summary>Answers</summary>
+
+1. Place the block inside `<head>`; a page then writes `{% block extra_head %}<style>...</style>{% endblock %}`.
+2. `Showing {{ books|length }} book{{ books|length|pluralize }}`
+3. Templates fail silently by design. Missing variables become empty strings, so check the spelling and look at `Debug` output when something is blank.
+
+</details>

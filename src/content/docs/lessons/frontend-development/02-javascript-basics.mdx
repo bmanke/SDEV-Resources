@@ -1,0 +1,189 @@
+---
+title: "2. JavaScript Basics"
+description: "Variables, data types, operators and the difference between == and ===."
+difficulty: beginner
+readingTime: 13
+tags: [javascript, basics]
+sidebar:
+  order: 2
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+JavaScript is the language of the browser. HTML gives a page structure, CSS styles it, and JavaScript makes it **behave**.
+In this lesson you will learn the core building blocks of the language itself. The next lessons connect it to the page.
+
+## Where to run it
+
+- In the browser: open DevTools (<kbd>F12</kbd>) and use the **Console** tab.
+- In a project: put code in `main.js` and watch the console while Vite's dev server runs.
+- In Node: `node file.js` runs a file in the terminal.
+
+`console.log()` is the main way to see values while learning:
+
+```js
+// Single-line comment
+/* Multi-line
+   comment */
+console.log('Hello from JavaScript');
+console.log('Several', 'values', 42, true);
+```
+
+Statements usually end with a semicolon. Pick a style (this course uses them) and stay consistent.
+
+## Variables: const and let
+
+```js
+const siteName = 'Hyrule Books';   // cannot be reassigned
+let visitors = 0;                  // can be reassigned
+
+visitors = visitors + 1;
+visitors += 1;                     // shortcut
+visitors++;                        // add one
+
+// siteName = 'Other';             // TypeError: assignment to constant variable
+```
+
+- Use **`const`** by default. It signals that the name always points to the same thing.
+- Use **`let`** when the value must change (counters, running totals).
+- Avoid `var`. It is older and has confusing scope rules.
+- Names use `camelCase` (`firstName`) and start with a letter, `_` or `$`.
+
+## Data types
+
+| Type | Example | Notes |
+| ---- | ------- | ----- |
+| `string` | `'hi'`, `"hi"`, `` `hi` `` | Text |
+| `number` | `42`, `3.14`, `-7` | One type for integers and decimals |
+| `boolean` | `true`, `false` | Lowercase |
+| `undefined` | `let x;` | A variable with no value yet |
+| `null` | `null` | "Intentionally nothing" |
+| `object` | `{}`, `[]` | Covered in lesson 4 |
+
+```js
+console.log(typeof 'text');     // 'string'
+console.log(typeof 3.5);        // 'number'
+console.log(typeof true);       // 'boolean'
+console.log(typeof undefined);  // 'undefined'
+console.log(typeof null);       // 'object'  (a famous historical quirk)
+console.log(typeof []);         // 'object'
+```
+
+## Strings
+
+Template literals use backticks and let you embed expressions with `${...}`:
+
+```js
+const name = 'Zelda';
+const level = 12;
+
+console.log(`${name} is level ${level}`);          // Zelda is level 12
+console.log(`Next level: ${level + 1}`);           // expressions are fine
+console.log('Hyrule'.length);                      // 6
+console.log('Hyrule'.toUpperCase());               // HYRULE
+console.log('  padded  '.trim());                  // 'padded'
+console.log('Legend of Zelda'.includes('Zelda'));  // true
+console.log('a,b,c'.split(','));                   // ['a', 'b', 'c']
+console.log('Hyrule'.slice(0, 3));                 // 'Hyr'
+```
+
+## Operators
+
+```js
+console.log(7 + 2, 7 - 2, 7 * 2);   // 9 5 14
+console.log(7 / 2);                 // 3.5   (no integer division)
+console.log(7 % 2);                 // 1     remainder
+console.log(2 ** 5);                // 32    power
+console.log(Math.floor(7 / 2));     // 3     round down
+console.log(Math.round(2.5), Math.max(3, 9), Math.random());
+```
+
+Floating-point math is not exact:
+
+```js
+console.log(0.1 + 0.2);                  // 0.30000000000000004
+console.log((0.1 + 0.2).toFixed(2));     // '0.30'  (note: toFixed returns a string)
+```
+
+### Equality: use ===
+
+```js
+console.log(5 === 5);       // true
+console.log(5 === '5');     // false: different types
+console.log(5 == '5');      // true: == converts types first (avoid!)
+console.log(5 !== '5');     // true
+```
+
+<Aside type="caution" title="Always use === and !==">
+Loose equality (`==`) converts values behind your back, with surprising results such as `0 == ''` being `true`. Strict equality never converts.
+</Aside>
+
+### Logical operators and truthiness
+
+`&&` (and), `||` (or) and `!` (not) combine conditions. In a condition, these values are **falsy**: `false`, `0`, `''`, `null`, `undefined` and `NaN`. Everything else is **truthy**, including `'0'`, `[]` and `{}`.
+
+```js
+const username = '';
+console.log(Boolean(username));          // false
+console.log(username || 'Guest');        // 'Guest'  || returns the first truthy value
+console.log(0 ?? 10);                    // 0        ?? only replaces null/undefined
+```
+
+## Converting types
+
+```js
+const text = '42';
+
+console.log(Number(text) + 1);        // 43
+console.log(parseInt('42px', 10));    // 42
+console.log(parseFloat('3.5kg'));     // 3.5
+console.log(Number('hello'));         // NaN  (not a number)
+console.log(Number.isNaN(Number('hello')));  // true
+console.log(String(99) + '!');        // '99!'
+console.log('5' + 2);                 // '52'  + joins strings!
+console.log('5' - 2);                 // 3     - forces numbers
+```
+
+The `+` operator with a string always concatenates. Convert input to numbers first.
+
+## Example: a simple calculation
+
+```js title="receipt.js"
+const itemPrice = 19.99;
+const quantity = 3;
+const taxRate = 0.05;
+
+const subtotal = itemPrice * quantity;
+const tax = subtotal * taxRate;
+const total = subtotal + tax;
+
+console.log(`Subtotal: $${subtotal.toFixed(2)}`);
+console.log(`Tax:      $${tax.toFixed(2)}`);
+console.log(`Total:    $${total.toFixed(2)}`);
+```
+
+## Check yourself
+
+1. Predict the output: `console.log('3' + 4 + 5)` and `console.log(3 + 4 + '5')`.
+2. Create `firstName` and `lastName` constants and print `Last, First` using a template literal.
+3. A value from a text box is `'12.5'`. Compute 15 percent of it, to two decimals.
+
+<details>
+<summary>Answers</summary>
+
+```js
+// 1: '345' and '75'. Evaluation goes left to right, and once a string is involved + joins.
+console.log('3' + 4 + 5);   // '345'
+console.log(3 + 4 + '5');   // '75'
+
+// 2
+const firstName = 'Link';
+const lastName = 'Hero';
+console.log(`${lastName}, ${firstName}`);
+
+// 3
+const input = '12.5';
+console.log((Number(input) * 0.15).toFixed(2));   // '1.88'
+```
+
+</details>

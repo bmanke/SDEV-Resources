@@ -1,0 +1,177 @@
+---
+title: "1. Variables, Types and Input"
+description: "Write your first Python programs: store values, read input, do math and format output."
+difficulty: beginner
+readingTime: 12
+tags: [python, basics]
+sidebar:
+  order: 1
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Every program does three things: it takes **input**, does some **processing**, and produces **output**.
+In this lesson you will learn the tools for all three: variables to hold data, `input()` and `print()` to talk to
+the user, and operators to do math.
+
+## Running a program
+
+Put your code in a file that ends in `.py`, then run it from a terminal:
+
+```sh
+python hello.py
+```
+
+```python title="hello.py"
+# Lines that start with # are comments. Python ignores them.
+# Use comments to explain WHY you did something, not just what the code says.
+print("Hello, world!")
+```
+
+## Variables
+
+A variable is a name that points to a value. You create one by assigning with `=`.
+
+```python
+player_name = "Zelda"     # str   (text)
+level = 3                 # int   (whole number)
+health = 87.5             # float (number with a decimal point)
+is_alive = True           # bool  (True or False, capital first letter)
+
+print(player_name, level, health, is_alive)
+print(type(level))        # <class 'int'>
+```
+
+Naming rules and habits:
+
+- Use letters, digits and underscores. A name cannot start with a digit.
+- Python style is `snake_case` (`player_name`, not `playerName`).
+- Pick names that explain themselves: `total_price` beats `tp`.
+- Names are case sensitive: `Level` and `level` are different variables.
+
+Python is **dynamically typed**: a variable has no fixed type, the value does. This is legal, but confusing, so avoid it.
+
+```python
+x = 5
+x = "five"   # x now refers to a string
+```
+
+## The four basic types
+
+| Type | Example | Typical use |
+| ---- | ------- | ----------- |
+| `int` | `42`, `-7` | Counting things |
+| `float` | `3.14`, `0.5` | Measurements, money (with care) |
+| `str` | `"hi"`, `'hi'` | Text |
+| `bool` | `True`, `False` | Yes/no decisions |
+
+## Getting input
+
+`input()` shows a prompt and waits for the user to type and press Enter. It **always returns a string**, even if
+the user types digits. Convert it when you need a number.
+
+```python title="age.py"
+name = input("What is your name? ")
+age_text = input("How old are you? ")      # "29" is a string here
+
+age = int(age_text)                        # now it is the integer 29
+print(f"Hi {name}! Next year you will be {age + 1}.")
+```
+
+Conversion functions: `int("7")`, `float("2.5")`, `str(10)`, `bool(0)`.
+
+<Aside type="caution" title="The classic mistake">
+`"5" + 3` raises a `TypeError`, because Python will not guess whether you want text or math. And
+`input("Age: ") + 1` fails for the same reason. Convert first.
+</Aside>
+
+## Math operators
+
+| Operator | Meaning | Example | Result |
+| -------- | ------- | ------- | ------ |
+| `+` `-` `*` | add, subtract, multiply | `7 * 3` | `21` |
+| `/` | true division (always a float) | `7 / 2` | `3.5` |
+| `//` | floor division (drops the remainder) | `7 // 2` | `3` |
+| `%` | remainder (modulo) | `7 % 2` | `1` |
+| `**` | power | `2 ** 5` | `32` |
+
+Python follows the usual order of operations: brackets, then `**`, then `* / // %`, then `+ -`.
+Shortcuts update a variable in place: `score += 10` means `score = score + 10`. There are also `-=`, `*=` and `/=`.
+
+`//` and `%` work as a pair. Sharing 17 cookies between 5 people:
+
+```python
+cookies = 17
+people = 5
+each = cookies // people      # 3 each
+left_over = cookies % people  # 2 are left
+print(f"{each} each, {left_over} left over")
+```
+
+## f-strings: formatting output
+
+Put an `f` before the quote and write expressions inside braces. After a colon you can control the format.
+
+```python
+price = 1234.5
+tax_rate = 0.05
+total = price * (1 + tax_rate)
+
+print(f"Total: ${total:,.2f}")   # Total: $1,296.23  (comma separators, 2 decimals)
+print(f"Tax rate: {tax_rate:.0%}")  # Tax rate: 5%
+print(f"{'Item':<10}{'Qty':>5}")  # < left-aligns, > right-aligns within a width
+```
+
+## Putting it together
+
+```python title="tip_calculator.py"
+# Input
+bill = float(input("Bill amount: "))
+tip_percent = float(input("Tip percent (e.g. 15): "))
+people = int(input("Split between how many people? "))
+
+# Processing
+tip = bill * tip_percent / 100
+total = bill + tip
+per_person = total / people
+
+# Output
+print(f"Tip:        ${tip:.2f}")
+print(f"Total:      ${total:.2f}")
+print(f"Per person: ${per_person:.2f}")
+```
+
+With a bill of 80, a 15 percent tip and 4 people, this prints a tip of $12.00, a total of $92.00 and $23.00 each.
+
+## Check yourself
+
+1. **Temperature converter.** Ask for a Celsius temperature and print it in Fahrenheit (`F = C * 9 / 5 + 32`).
+2. **Time split.** Ask for a number of seconds and print it as hours, minutes and seconds (use `//` and `%`).
+3. **Fix it.** This program crashes. Why, and how do you fix it?
+
+   ```python
+   quantity = input("How many? ")
+   print("Double is", quantity * 2.5)
+   ```
+
+<details>
+<summary>Solutions</summary>
+
+```python
+# 1
+celsius = float(input("Celsius: "))
+print(f"{celsius}C is {celsius * 9 / 5 + 32:.1f}F")
+
+# 2
+total = int(input("Seconds: "))
+hours = total // 3600
+minutes = (total % 3600) // 60
+seconds = total % 60
+print(f"{hours}h {minutes}m {seconds}s")
+
+# 3: input() returns text, and text cannot be multiplied by a float.
+quantity = int(input("How many? "))      # convert first
+print("Double is", quantity * 2.5)
+```
+
+</details>

@@ -1,0 +1,235 @@
+---
+title: "10. Classes and Inheritance"
+description: "Model real things with classes, then reuse and specialize them with inheritance."
+difficulty: intermediate
+readingTime: 16
+tags: [python, oop, classes, inheritance]
+sidebar:
+  order: 10
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+So far your data lived in separate variables, lists and dictionaries, and your functions lived elsewhere. A **class**
+bundles the data and the behaviour of one kind of thing together. An **object** is one specific example of that class.
+
+Think of a class as a blueprint for a house, and objects as the houses built from it.
+
+## A first class
+
+```python title="book.py"
+class Book:
+    def __init__(self, title, author, pages):
+        # __init__ runs automatically when you create a Book.
+        # `self` is the object being built. Attributes are stored on it.
+        self.title = title
+        self.author = author
+        self.pages = pages
+        self.is_checked_out = False
+
+    def check_out(self):
+        if self.is_checked_out:
+            return False                 # already taken
+        self.is_checked_out = True
+        return True
+
+    def give_back(self):
+        self.is_checked_out = False
+
+    def __str__(self):
+        # Controls what print(book) shows
+        status = "checked out" if self.is_checked_out else "available"
+        return f"{self.title} by {self.author} ({status})"
+
+
+dune = Book("Dune", "Frank Herbert", 412)    # creates an object
+print(dune)                                   # Dune by Frank Herbert (available)
+print(dune.check_out())                       # True
+print(dune.check_out())                       # False
+print(dune)                                   # Dune by Frank Herbert (checked out)
+```
+
+Key words:
+
+- **Attribute**: a variable that belongs to an object (`self.title`).
+- **Method**: a function defined inside a class. Its first parameter is always `self`.
+- **Constructor**: `__init__`, which sets up a new object.
+- **Instance**: one object made from the class.
+
+`self` is how a method refers to the object it was called on. When you write `dune.check_out()`, Python passes `dune` in as `self` automatically.
+
+## Many objects, one class
+
+Each object keeps its own data.
+
+```python
+library = [
+    Book("Dune", "Frank Herbert", 412),
+    Book("Emma", "Jane Austen", 474),
+    Book("Neuromancer", "William Gibson", 271),
+]
+
+library[1].check_out()
+
+for book in library:
+    print(book)
+
+available = [book for book in library if not book.is_checked_out]
+print(len(available), "books available")
+```
+
+## Protecting data with methods
+
+Python has no strict private data, but by convention a name beginning with an underscore means "internal, please use the methods instead".
+
+```python title="bank_account.py"
+class BankAccount:
+    def __init__(self, owner, balance=0):
+        self.owner = owner
+        self._balance = balance           # internal: change it through the methods
+
+    @property
+    def balance(self):
+        return self._balance              # read-only access: account.balance
+
+    def deposit(self, amount):
+        if amount <= 0:
+            raise ValueError("deposit must be positive")
+        self._balance += amount
+
+    def withdraw(self, amount):
+        if amount > self._balance:
+            raise ValueError("insufficient funds")
+        self._balance -= amount
+
+
+account = BankAccount("Mia", 100)
+account.deposit(50)
+account.withdraw(30)
+print(account.balance)     # 120
+```
+
+The class guards its own rules: no one can end up with a negative deposit or an overdraft.
+
+## Inheritance
+
+When one kind of thing is a more specific version of another, use **inheritance**. The child class (subclass) gets everything from the parent class (superclass) and can add or change behaviour.
+
+```python title="animals.py"
+class Animal:
+    def __init__(self, name):
+        self.name = name
+
+    def speak(self):
+        return f"{self.name} makes a sound."
+
+    def describe(self):
+        return f"{self.name} is an animal."
+
+
+class Dog(Animal):                      # Dog inherits from Animal
+    def __init__(self, name, breed):
+        super().__init__(name)          # let the parent set up `name`
+        self.breed = breed
+
+    def speak(self):                    # override: replace the parent's version
+        return f"{self.name} barks."
+
+
+class Cat(Animal):
+    def speak(self):
+        return f"{self.name} meows."
+
+
+pets = [Dog("Rex", "Husky"), Cat("Luna"), Animal("Generic")]
+
+for pet in pets:
+    print(pet.speak())        # each object uses its own version of speak()
+    print(pet.describe())     # inherited, so it works for all three
+```
+
+```text
+Rex barks.
+Rex is an animal.
+Luna meows.
+Luna is an animal.
+Generic makes a sound.
+Generic is an animal.
+```
+
+Using the same method name on different classes is called **polymorphism**. The calling code does not need to care which kind of animal it has.
+
+- `super()` gives you the parent class so you can reuse its code instead of copying it.
+- `isinstance(rex, Animal)` is `True` for a `Dog`, because a dog is an animal.
+- If a subclass has no `__init__` (like `Cat`), it uses the parent's.
+
+<Aside type="tip" title="Is-a versus has-a">
+Use inheritance for **is-a** relationships (a Dog is an Animal). Use ordinary attributes for **has-a** relationships (a Library has Books, so keep a list of books inside it). Reaching for inheritance when the relationship is has-a leads to confusing designs.
+</Aside>
+
+## Classes in their own files
+
+Put each class in its own module and import it, just as you did with functions.
+
+```python title="main.py"
+from book import Book
+from bank_account import BankAccount
+```
+
+## Check yourself
+
+1. Create a `Rectangle` class with `width` and `height`, an `area()` method and a `__str__` that prints `3 x 4`.
+2. Create `Shape` with a `name` and a method `area()` that returns `0`. Then make `Circle` and `Square` subclasses that override `area()`. Print the areas of a list holding one of each.
+3. Add a `late_fee(days)` method to `Book` that charges $0.25 per day.
+
+<details>
+<summary>Solutions</summary>
+
+```python
+# 1
+class Rectangle:
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+
+    def area(self):
+        return self.width * self.height
+
+    def __str__(self):
+        return f"{self.width} x {self.height}"
+
+# 2
+import math
+
+class Shape:
+    def __init__(self, name):
+        self.name = name
+
+    def area(self):
+        return 0
+
+class Circle(Shape):
+    def __init__(self, radius):
+        super().__init__("circle")
+        self.radius = radius
+
+    def area(self):
+        return math.pi * self.radius ** 2
+
+class Square(Shape):
+    def __init__(self, side):
+        super().__init__("square")
+        self.side = side
+
+    def area(self):
+        return self.side ** 2
+
+for shape in [Circle(1), Square(3)]:
+    print(f"{shape.name}: {shape.area():.2f}")
+
+# 3: inside the Book class
+    def late_fee(self, days):
+        return round(max(days, 0) * 0.25, 2)
+```
+
+</details>

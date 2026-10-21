@@ -1,0 +1,227 @@
+---
+title: "Emmet Cheatsheet"
+description: "A cheatsheet of Emmet abbreviations for HTML and CSS, with the VS Code actions and settings that go with them. By Jackson Beachell."
+sidebar:
+  order: 2
+tableOfContents:
+  maxHeadingLevel: 2
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="tip" title="Credit">
+This cheatsheet was written by **Jackson Beachell**. All credit for the Emmet cheatsheet goes to him.
+</Aside>
+
+Emmet is built into VS Code. Type an abbreviation, then press **Tab** (or **Enter**, depending on settings) to expand it.
+
+---
+
+## 1. HTML — Core Syntax
+
+| Operator | Meaning | Example | Expands to |
+|---|---|---|---|
+| `>` | Child | `div>ul>li` | nested div > ul > li |
+| `+` | Sibling | `div+p+span` | three sibling elements |
+| `^` | Climb-up | `div+div>p>span^^em` | climbs up 2 levels before continuing |
+| `*` | Multiplication | `li*5` | 5 `<li>` elements |
+| `()` | Grouping | `(div>dl)+footer>p` | groups nested structures |
+| `.` | Class | `div.card` | `<div class="card">` |
+| `#` | ID | `div#header` | `<div id="header">` |
+| `[]` | Custom attribute | `input[type=text name=q]` | `<input type="text" name="q">` |
+| `{}` | Text content | `a{Click me}` | `<a href="">Click me</a>` |
+| `$` | Numbering | `li.item$*3` | `item1`, `item2`, `item3` |
+| `$$` | Zero-padded numbering | `li.item$$*3` | `item01`, `item02`, `item03` |
+| `$@-` | Reverse numbering | `li.item$@-*3` | `item3`, `item2`, `item1` |
+| `!` | Doctype/boilerplate | `!` | Full HTML5 boilerplate |
+
+---
+
+## 2. Combining Operators (Examples)
+
+| Abbreviation | Result |
+|---|---|
+| `ul>li*5` | `<ul>` with 5 `<li>` children |
+| `div>ul>li*3+p` | nested list of 3 items, then a sibling `<p>` |
+| `div#page>div.logo+ul#navigation>li*5>a{Item $}` | header/nav pattern with numbered links |
+| `.item` | `<div class="item">` (div is implicit) |
+| `table>tr*3>td*4` | 3x4 table grid |
+| `(header>ul.nav>li*3>a)+footer.info` | grouped header + footer sibling |
+
+---
+
+## 3. Implicit Tag Names
+
+Emmet guesses the tag based on context or attribute — you often don't need to type `div`.
+
+| Abbreviation | Expands to |
+|---|---|
+| `.wrapper` | `<div class="wrapper">` |
+| `ul>.item` | `<ul><li class="item">` (li implied inside ul) |
+| `table>.row>.col` | `<table><tr class="row"><td class="col">` |
+| `select>.option*3` | `<select><option class="option">` x3 |
+| `em>.time` | `<em><span class="time">` |
+
+---
+
+## 4. Text and Attributes
+
+| Abbreviation | Expands to |
+|---|---|
+| `a{Click here}` | `<a href="">Click here</a>` |
+| `p>{Hello }+em{world}` | `<p>Hello <em>world</em></p>` |
+| `img[src=cat.png alt=Cat]` | `<img src="cat.png" alt="Cat">` |
+| `input:text` | `<input type="text" name="" id="">` |
+| `a[href]{link}` | `<a href="" >link</a>` with empty href for editing |
+| `button[disabled.]` | boolean attribute shorthand (dot marks boolean) |
+
+---
+
+## 5. Common Abbreviation Aliases
+
+| Alias | Expands to |
+|---|---|
+| `!` or `!!!` | HTML5 boilerplate document |
+| `a:link` | `<a href="http://"></a>` |
+| `a:mail` | `<a href="mailto:"></a>` |
+| `btn:s` | `<button type="submit">` |
+| `btn:r` | `<button type="reset">` |
+| `btn:b` | `<button type="button">` |
+| `inp` / `input:text` | `<input type="text" name="" id="">` |
+| `input:email` | `<input type="email" name="" id="">` |
+| `input:pw` | `<input type="password" name="" id="">` |
+| `input:c` | `<input type="checkbox" name="" id="">` |
+| `input:r` | `<input type="radio" name="" id="">` |
+| `input:file` | `<input type="file">` |
+| `input:submit` | `<input type="submit" value="">` |
+| `select+` | `<select name="" id=""><option value="1">1</option>...</select>` |
+| `link:css` | `<link rel="stylesheet" href="style.css">` |
+| `script:src` | `<script src=""></script>` |
+| `meta:vp` | viewport meta tag |
+| `meta:utf` | UTF-8 charset meta tag |
+| `form:get` / `form:post` | `<form action="" method="get/post">` |
+| `iframe` | `<iframe src="" frameborder="0"></iframe>` |
+| `map+` | `<map name=""><area shape="" coords="" href="" alt=""></map>` |
+| `table+` | full `<table><thead>...<tbody>...` skeleton |
+
+---
+
+## 6. Lorem Ipsum Generator
+
+| Abbreviation | Result |
+|---|---|
+| `lorem` | 30 words of lorem ipsum text |
+| `lorem10` | 10 words |
+| `lorem50` | 50 words |
+| `p*3>lorem10` | 3 paragraphs, each with 10 words |
+| `ul>li*4>lorem3` | 4 list items, each with 3-word lorem text |
+
+---
+
+## 7. CSS / SCSS / LESS Abbreviations
+
+Emmet also works in `.css`, `.scss`, `.less` files.
+
+| Abbreviation | Expands to |
+|---|---|
+| `m10` | `margin: 10px;` |
+| `p10-20` | `padding: 10px 20px;` |
+| `m0-a` | `margin: 0 auto;` |
+| `w100p` | `width: 100%;` |
+| `h100` | `height: 100px;` |
+| `pos:a` | `position: absolute;` |
+| `pos:r` | `position: relative;` |
+| `pos:f` | `position: fixed;` |
+| `d:f` / `d:n` / `d:b` | `display: flex;` / `none;` / `block;` |
+| `fl:l` / `fl:r` | `float: left;` / `right;` |
+| `tac` / `tal` / `tar` | `text-align: center/left/right;` |
+| `fw:b` | `font-weight: bold;` |
+| `fz12` | `font-size: 12px;` |
+| `c:#333` | `color: #333;` |
+| `bg:#fff` | `background: #fff;` |
+| `bd1-s-#000` | `border: 1px solid #000;` |
+| `bdrs10` | `border-radius: 10px;` |
+| `ov:h` | `overflow: hidden;` |
+| `trf:s2` | `transform: scale(2);` |
+| `tr:ea` | `transition: ease;` |
+| `!` (in CSS) | adds `!important` to the property above |
+
+Numbers default to `px`; use a decimal for `em`/`%` context where relevant (Emmet infers based on abbreviation, e.g. `w100p` = %, `lh1.5` = unitless).
+
+---
+
+## 8. VS Code-Specific Emmet Actions & Keybindings
+
+These are commands (not typed abbreviations) — search them in the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) or bind your own keys.
+
+| Action | Default Behavior |
+|---|---|
+| **Expand Abbreviation** | `Tab` (when cursor is at end of abbreviation) |
+| **Wrap with Abbreviation** | `Ctrl+Shift+P` → "Emmet: Wrap with Abbreviation" — wraps selected text/lines |
+| **Balance (Outward)** | `Shift+Ctrl+Alt+Left` (Win/Linux) — selects parent tag |
+| **Balance (Inward)** | `Shift+Ctrl+Alt+Right` — selects child tag |
+| **Go to Matching Pair** | `Shift+Ctrl+Alt+.` |
+| **Remove Tag** | Command Palette → "Emmet: Remove Tag" |
+| **Update Tag** | Command Palette → "Emmet: Update Tag" |
+| **Update Image Size** | Command Palette → "Emmet: Update Image Size" (auto-fills width/height for local/base64 images) |
+| **Merge Lines** | Command Palette → "Emmet: Merge Lines" |
+| **Toggle Comment** | Command Palette → "Emmet: Toggle Comment" |
+| **Split/Join Tag** | Command Palette → "Emmet: Split/Join Tag" — toggles `<div></div>` ↔ `<div />` |
+| **Next/Previous Edit Point** | `Ctrl+Alt+Right` / `Ctrl+Alt+Left` — jumps between empty attributes/tags |
+| **Increment/Decrement number** | `Ctrl+Alt+Up/Down` (by 1), `Alt+Up/Down` (by 0.1), `Ctrl+Shift+Alt+Up/Down` (by 10) — on numeric CSS values |
+| **Evaluate Math Expression** | Command Palette → "Emmet: Evaluate Math Expression" — select `10+5*2` and resolve inline |
+
+---
+
+## 9. VS Code Settings Worth Knowing
+
+Add these to `settings.json` to tune Emmet's behavior:
+
+```jsonc
+{
+  // Expand abbreviations by pressing Tab
+  "emmet.triggerExpansionOnTab": true,
+
+  // Enable Emmet in languages it doesn't cover by default (React/Vue/etc.)
+  "emmet.includeLanguages": {
+    "javascript": "javascriptreact",
+    "vue-html": "html"
+  },
+
+  // Show expanded abbreviation as a suggestion in the autocomplete list
+  "emmet.showExpandedAbbreviation": "always",
+
+  // Add custom snippets (place a snippets.json and point Emmet to it)
+  "emmet.extensionsPath": ["./emmet-snippets"],
+
+  // Force self-closing tags to use XHTML style (<br />)
+  "emmet.syntaxProfiles": {
+    "html": { "self_closing_tag": true }
+  },
+
+  // Preferences for indentation, quote style, etc.
+  "emmet.preferences": {
+    "css.propertyEnd": ";",
+    "html.attr.quotes": "double"
+  }
+}
+```
+
+---
+
+## 10. Handy Combos to Memorize
+
+| Task | Abbreviation |
+|---|---|
+| Full HTML5 skeleton | `!` |
+| Nav bar with 5 links | `nav>ul>li*5>a{Link $}` |
+| Card grid (3 cards) | `.grid>.card*3>(.card-img+.card-body>h3+p)` |
+| Form with labeled inputs | `form>(label{Name}+input:text)+(label{Email}+input:email)+button:s{Submit}` |
+| Table with header row | `table>thead>tr>th*4^^tbody>tr*3>td*4` |
+| Responsive image | `picture>source[srcset]*2+img[src]` |
+| Flex row of 3 boxes | `.row>.box*3` then apply `d:f` in CSS |
+| Numbered heading list | `h2{Section $}*3` |
+
+---
+
+**Tip:** In VS Code, if `Tab` expansion feels unreliable, check that `emmet.triggerExpansionOnTab` is `true` and that no other extension (like an autocomplete/snippet extension) is intercepting `Tab` before Emmet gets it.

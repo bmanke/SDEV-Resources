@@ -1,0 +1,321 @@
+---
+title: "9. REST APIs, fetch and CRUD"
+description: "Talk to a server with fetch and async/await, and build create, read, update and delete features."
+difficulty: intermediate
+readingTime: 20
+tags: [javascript, fetch, rest, async]
+sidebar:
+  order: 9
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Most web apps load their data from a server. The browser asks, the server answers with JSON, and your code turns that
+into HTML. This lesson covers the conventions (REST), the tool (`fetch`) and the syntax that makes it readable (`async`/`await`).
+
+## What is a REST API?
+
+A REST API exposes **resources** (books, users, orders) at URLs. The HTTP **method** says what you want to do.
+
+| Action | Method | URL | Body | Typical status |
+| ------ | ------ | --- | ---- | -------------- |
+| List all | `GET` | `/books` | none | 200 |
+| Get one | `GET` | `/books/3` | none | 200, or 404 if missing |
+| Create | `POST` | `/books` | new book as JSON | 201 |
+| Replace | `PUT` | `/books/3` | complete book | 200 |
+| Change some fields | `PATCH` | `/books/3` | only the changed fields | 200 |
+| Delete | `DELETE` | `/books/3` | none | 200 or 204 |
+
+Those four operations (create, read, update, delete) are known as **CRUD**.
+
+Status code families: `2xx` success, `3xx` redirect, `4xx` you made a mistake (`404` not found, `400` bad request), `5xx` the server failed.
+
+## A practice server in 2 minutes
+
+**JSON Server** turns a JSON file into a working REST API.
+
+```sh
+npm install json-server
+```
+
+```json title="db.json"
+{
+  "books": [
+    { "id": "1", "title": "The Legend of Hyrule", "author": "Zelda", "year": 2020 },
+    { "id": "2", "title": "The Hero's Journey", "author": "Link", "year": 2022 }
+  ]
+}
+```
+
+```json title="package.json (excerpt)"
+{
+  "scripts": {
+    "api-server": "json-server --watch db.json --port 3000"
+  }
+}
+```
+
+Run `npm run api-server` in one terminal and your Vite dev server in another. Visit `http://localhost:3000/books` in the
+browser to see the JSON.
+
+## Asynchronous code and promises
+
+Network requests take time. JavaScript does not freeze while waiting. It gives you a **promise**, a placeholder for a value that arrives later.
+`async` and `await` let you write promise code that reads top to bottom.
+
+```js
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function demo() {
+  console.log('start');
+  await wait(1000);               // pause THIS function, not the whole page
+  console.log('one second later');
+}
+
+demo();
+console.log('this prints before "one second later"');
+```
+
+- `await` only works inside an `async` function (or at the top level of a module).
+- An `async` function always returns a promise.
+
+## GET with fetch
+
+```js
+const response = await fetch('http://localhost:3000/books');
+
+console.log(response.status);     // 200
+console.log(response.ok);         // true for 200-299
+
+const books = await response.json();   // parsing is asynchronous too
+console.log(books);
+```
+
+<Aside type="caution" title="fetch only rejects on network failure">
+A `404` or `500` response is **not** an error to `fetch`. The promise still resolves. Always check `response.ok` yourself.
+</Aside>
+
+### A reusable API module
+
+Keep every request in one file, so the rest of the app never worries about URLs and headers.
+
+```js title="src/api/books.js"
+const BASE_URL = 'http://localhost:3000/books';
+
+async function request(url, options) {
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status} ${response.statusText}`);
+  }
+  // DELETE can return an empty body, so only parse JSON when there is some
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
+}
+
+export function getBooks() {
+  return request(BASE_URL);
+}
+
+export function getBook(id) {
+  return request(`${BASE_URL}/${id}`);
+}
+
+export function createBook(book) {
+  return request(BASE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(book),                 // the body must be a string
+  });
+}
+
+export function updateBook(id, changes) {
+  return request(`${BASE_URL}/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(changes),
+  });
+}
+
+export function deleteBook(id) {
+  return request(`${BASE_URL}/${id}`, { method: 'DELETE' });
+}
+```
+
+Trying them from the console or from `main.js`:
+
+```js
+import { getBooks, createBook, updateBook, deleteBook } from './api/books.js';
+
+const created = await createBook({ title: 'Ganon Chronicles', author: 'Ganondorf', year: 2021 });
+console.log('created', created.id);
+
+await updateBook(created.id, { year: 2022 });
+await deleteBook(created.id);
+
+console.log(await getBooks());
+```
+
+## Handling errors
+
+Wrap calls in `try`/`catch`. The error could be a network failure (server not running) or the `Error` thrown above.
+
+```js
+async function loadBooks() {
+  try {
+    return await getBooks();
+  } catch (error) {
+    console.error('Could not load books:', error.message);
+    return [];
+  }
+}
+```
+
+## Showing results: loading, error, empty
+
+Every screen that depends on a request has at least four states. Design for all of them.
+
+```html title="index.html (excerpt)"
+<main>
+  <p id="status" role="status"></p>
+  <ul id="book-list"></ul>
+</main>
+```
+
+```js title="src/main.js"
+import { getBooks, deleteBook } from './api/books.js';
+
+const statusEl = document.querySelector('#status');
+const listEl = document.querySelector('#book-list');
+
+function render(books) {
+  listEl.replaceChildren();
+  for (const book of books) {
+    const li = document.createElement('li');
+    li.dataset.id = book.id;
+
+    const title = document.createElement('span');
+    title.textContent = `${book.title} (${book.year})`;
+
+    const remove = document.createElement('button');
+    remove.textContent = 'Delete';
+    remove.className = 'delete';
+
+    li.append(title, remove);
+    listEl.append(li);
+  }
+}
+
+async function init() {
+  statusEl.textContent = 'Loading books...';            // loading
+  try {
+    const books = await getBooks();
+    if (books.length === 0) {
+      statusEl.textContent = 'No books yet. Add one!';   // empty
+    } else {
+      statusEl.textContent = '';
+      render(books);                                     // success
+    }
+  } catch (error) {
+    statusEl.textContent = 'Sorry, the books could not be loaded.';   // error
+    console.error(error);
+  }
+}
+
+// Event delegation for the delete buttons (see lesson 6)
+listEl.addEventListener('click', async (event) => {
+  const button = event.target.closest('.delete');
+  if (!button) return;
+
+  const item = button.closest('li');
+  button.disabled = true;                                // avoid double clicks
+  try {
+    await deleteBook(item.dataset.id);
+    item.remove();                                       // update the page once the server agrees
+  } catch (error) {
+    button.disabled = false;
+    statusEl.textContent = 'Could not delete that book.';
+  }
+});
+
+init();
+```
+
+### Adding books with a form
+
+```js
+import { createBook } from './api/books.js';
+
+const form = document.querySelector('#book-form');
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(form));
+  data.year = Number(data.year);                         // FormData values are strings
+
+  try {
+    await createBook(data);
+    form.reset();
+    await init();                                        // reload the list
+  } catch (error) {
+    statusEl.textContent = 'Could not save the book.';
+  }
+});
+```
+
+## Several requests at once
+
+When requests do not depend on each other, start them together.
+
+```js
+const [books, authors] = await Promise.all([
+  fetch('http://localhost:3000/books').then((r) => r.json()),
+  fetch('http://localhost:3000/authors').then((r) => r.json()),
+]);
+```
+
+## Searching and filtering
+
+JSON Server supports query parameters, and `URLSearchParams` builds them safely.
+
+```js
+const params = new URLSearchParams({ author: 'Zelda', _sort: 'year' });
+const response = await fetch(`http://localhost:3000/books?${params}`);
+console.log(await response.json());
+```
+
+## Check yourself
+
+1. Add an `updateBook` call that toggles an `isRead` field when the user clicks a book title.
+2. What is printed, and in what order?
+
+   ```js
+   console.log('A');
+   setTimeout(() => console.log('B'), 0);
+   Promise.resolve().then(() => console.log('C'));
+   console.log('D');
+   ```
+
+3. Why must `fetch(...).then(r => r.json())` be written even though the response already arrived?
+
+<details>
+<summary>Answers</summary>
+
+```js
+// 1: add a title click to the delegated listener, with isRead tracked in data attributes
+listEl.addEventListener('click', async (event) => {
+  const title = event.target.closest('span');
+  if (!title) return;
+  const item = title.closest('li');
+  const isRead = item.dataset.read !== 'true';
+  await updateBook(item.dataset.id, { isRead });
+  item.dataset.read = String(isRead);
+  title.classList.toggle('read', isRead);
+});
+```
+
+2. `A`, `D`, `C`, `B`. Synchronous code runs first, then promise callbacks (microtasks), then timers (even with a 0 delay).
+3. `fetch` resolves as soon as the headers arrive. The body is streamed, and reading it (`json()`) is its own asynchronous step.
+
+</details>

@@ -1,0 +1,266 @@
+---
+title: "5. Querying with the ORM"
+description: "Create, read, update and delete rows with QuerySets, field lookups, Q objects, aggregates and F expressions."
+difficulty: intermediate
+readingTime: 18
+tags: [django, orm, queryset]
+sidebar:
+  order: 5
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The ORM is accessed through each model's **manager**, `Model.objects`. A query returns a **QuerySet**, a lazy list of rows
+that you can filter, order and combine. This lesson uses the `shell` so you can see results immediately.
+
+```sh
+python manage.py shell
+```
+
+## Sample data
+
+```python
+from books.models import Author, Book
+
+herbert = Author.objects.create(name="Frank Herbert", born=1920)
+gibson = Author.objects.create(name="William Gibson", born=1948)
+austen = Author.objects.create(name="Jane Austen", born=1775)
+
+Book.objects.create(title="Dune", author=herbert, published_year=1965, pages=412)
+Book.objects.create(title="Neuromancer", author=gibson, published_year=1984, pages=271)
+Book.objects.create(title="Count Zero", author=gibson, published_year=1986, pages=256)
+Book.objects.create(title="Emma", author=austen, published_year=1815, pages=474)
+```
+
+## Create, read, update, delete
+
+```python
+# Create (two ways)
+book = Book(title="Persuasion", author=austen, published_year=1817, pages=249)
+book.save()
+Book.objects.create(title="Mona Lisa Overdrive", author=gibson, published_year=1988, pages=308)
+
+# Read
+Book.objects.all()                       # every row
+Book.objects.get(title="Dune")           # exactly one row, or an exception
+Book.objects.get(pk=1)                   # pk is the primary key
+
+# Update
+book.pages = 250
+book.save()
+Book.objects.filter(author=gibson).update(pages=300)   # update many rows in one query
+
+# Delete
+book.delete()
+Book.objects.filter(published_year__lt=1800).delete()     # returns (0, {}) here: nothing matched
+```
+
+`get()` raises `Book.DoesNotExist` when nothing matches and `MultipleObjectsReturned` when more than one does. Use `filter()` when zero or many results are fine.
+
+## Filtering
+
+```python
+Book.objects.filter(author=gibson)                     # equality
+Book.objects.exclude(author=gibson)                    # everything except
+Book.objects.filter(author=gibson, published_year__gt=1985)    # AND
+Book.objects.filter(author__name="William Gibson")     # follow the relationship with __
+```
+
+### Field lookups
+
+A double underscore after the field name chooses the comparison.
+
+| Lookup | Meaning | Example |
+| ------ | ------- | ------- |
+| `exact` (default) | Equals | `title="Dune"` |
+| `iexact` | Equals, ignoring case | `title__iexact="dune"` |
+| `contains`, `icontains` | Substring | `title__icontains="zero"` |
+| `startswith`, `endswith` | Prefix or suffix | `title__startswith="N"` |
+| `gt`, `gte`, `lt`, `lte` | Comparisons | `pages__gte=300` |
+| `in` | Is one of | `published_year__in=[1965, 1984]` |
+| `range` | Between (inclusive) | `pages__range=(200, 300)` |
+| `isnull` | Is `NULL` | `author__born__isnull=True` |
+
+## Ordering, limiting and counting
+
+```python
+Book.objects.order_by("published_year")         # oldest first
+Book.objects.order_by("-pages")                 # longest first
+Book.objects.order_by("author__name", "title")  # several keys
+
+Book.objects.all()[:3]                          # first three (SQL LIMIT)
+Book.objects.all()[2:5]                         # slicing for pagination
+
+Book.objects.count()
+Book.objects.filter(pages__gt=1000).exists()    # fast yes/no check
+Book.objects.first()
+Book.objects.order_by("pages").last()
+
+Book.objects.values_list("title", flat=True)    # just the titles
+Book.objects.values("title", "pages")           # dictionaries instead of objects
+```
+
+## Laziness and chaining
+
+A QuerySet does not touch the database until you use it: loop over it, slice with a step, call `list()`, `len()`, `count()` and so on. That lets you build a query in pieces.
+
+```python
+books = Book.objects.all()
+books = books.filter(published_year__gte=1900)    # nothing has run yet
+books = books.order_by("title")                   # still nothing
+print(books.query)                                # the SQL Django will run
+
+for book in books:                                # NOW the query runs
+    print(book.title)
+```
+
+Each QuerySet is cached after it is evaluated, so looping a second time does not query again.
+
+## Complex conditions with Q
+
+`filter()` arguments are combined with AND. For OR and NOT, use `Q` objects.
+
+```python
+from django.db.models import Q
+
+Book.objects.filter(Q(title__icontains="zero") | Q(author__name__icontains="austen"))
+Book.objects.filter(Q(published_year__gte=1980) & ~Q(author=gibson))
+```
+
+A search box that looks in titles and author names:
+
+```python
+def search_books(term):
+    return Book.objects.filter(
+        Q(title__icontains=term) | Q(author__name__icontains=term)
+    ).select_related("author")
+```
+
+## Aggregation and annotation
+
+`aggregate()` collapses a QuerySet into one summary dictionary. `annotate()` adds a computed value to **every row**.
+
+```python
+from django.db.models import Avg, Count, Max, Min, Sum
+
+# Using only the four books from the "Sample data" section
+Book.objects.aggregate(avg_pages=Avg("pages"), longest=Max("pages"), total=Sum("pages"))
+# {'avg_pages': 353.25, 'longest': 474, 'total': 1413}
+
+authors = Author.objects.annotate(book_count=Count("books")).order_by("-book_count")
+for author in authors:
+    print(author.name, author.book_count)
+# William Gibson 2   <- the most prolific author comes first
+# Frank Herbert 1
+# Jane Austen 1
+```
+
+## F expressions: use database values in updates
+
+```python
+from django.db.models import F
+
+Book.objects.update(pages=F("pages") + 10)        # no race condition, one query
+Book.objects.filter(pages__lt=F("published_year") / 10)   # compare two columns
+```
+
+## Searching and sorting in the view
+
+Put the ideas together in the list view. The user can search and sort through the query string.
+
+```python title="books/views.py"
+from django.db.models import Q
+from django.shortcuts import get_object_or_404, render
+
+from .models import Book
+
+SORT_OPTIONS = {
+    "title": "title",
+    "newest": "-published_year",
+    "oldest": "published_year",
+    "longest": "-pages",
+}
+
+
+def home(request):
+    return render(request, "books/home.html", {"message": "Welcome to Book Club"})
+
+
+def book_list(request):
+    query = request.GET.get("q", "").strip()
+    sort = request.GET.get("sort", "title")
+
+    books = Book.objects.select_related("author")
+    if query:
+        books = books.filter(Q(title__icontains=query) | Q(author__name__icontains=query))
+    books = books.order_by(SORT_OPTIONS.get(sort, "title"))   # only allow known sort keys
+
+    context = {"books": books, "query": query, "sort": sort}
+    return render(request, "books/book_list.html", context)
+
+
+def book_detail(request, book_id):
+    book = get_object_or_404(Book.objects.select_related("author"), pk=book_id)
+    return render(request, "books/book_detail.html", {"book": book})
+```
+
+Whitelisting the sort keys matters. Never pass a raw query-string value to `order_by()`.
+
+```jinja title="books/templates/books/book_list.html"
+{% extends "base.html" %}
+
+{% block title %}Books | Book Club{% endblock %}
+
+{% block content %}
+  <h1>Books</h1>
+
+  <form method="get">
+    <input type="search" name="q" value="{{ query }}" placeholder="Search titles or authors">
+    <select name="sort">
+      <option value="title" {% if sort == "title" %}selected{% endif %}>Title</option>
+      <option value="newest" {% if sort == "newest" %}selected{% endif %}>Newest</option>
+      <option value="oldest" {% if sort == "oldest" %}selected{% endif %}>Oldest</option>
+      <option value="longest" {% if sort == "longest" %}selected{% endif %}>Longest</option>
+    </select>
+    <button type="submit">Search</button>
+  </form>
+
+  <p>{{ books|length }} book{{ books|length|pluralize }} found.</p>
+
+  <ul>
+    {% for book in books %}
+      <li>
+        <a href="{% url 'books:book_detail' book.id %}">{{ book.title }}</a>
+        by {{ book.author.name }} ({{ book.published_year }}, {{ book.pages }} pages)
+      </li>
+    {% empty %}
+      <li>No books found.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}
+```
+
+<Aside type="tip" title="See the SQL">
+Print `queryset.query` or set `LOGGING` for `django.db.backends` to see exactly what runs. When a page feels slow, the first thing to count is how many queries it makes. Lesson 6 shows the most common cause.
+</Aside>
+
+## Check yourself
+
+1. Get the titles of all books by Jane Austen written before 1850.
+2. Find the average number of pages for each author.
+3. Why is `Book.objects.get(title="Emma")` risky in production code?
+
+<details>
+<summary>Answers</summary>
+
+```python
+# 1
+Book.objects.filter(author__name="Jane Austen", published_year__lt=1850).values_list("title", flat=True)
+
+# 2
+Author.objects.annotate(avg_pages=Avg("books__pages"))
+```
+
+3. `get()` raises `DoesNotExist` if there is no match, and `MultipleObjectsReturned` if titles are duplicated. In a view, prefer `get_object_or_404`, or `filter(...).first()` when you can handle `None`.
+
+</details>

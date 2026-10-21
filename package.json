@@ -28,8 +28,5 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10"
-  },
-  "allowScripts": {
-    "esbuild@0.28.2": true
   }
 }

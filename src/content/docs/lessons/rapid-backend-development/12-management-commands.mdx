@@ -1,0 +1,227 @@
+---
+title: "12. Custom Management Commands"
+description: "Write your own manage.py commands to import data, set up roles and report on the database, with arguments and tests."
+difficulty: intermediate
+readingTime: 14
+tags: [django, management-commands, csv, automation]
+sidebar:
+  order: 12
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+You already use commands such as `runserver` and `migrate`. Anything that is not a web page but needs your models is a
+good candidate for your own **management command**: importing a spreadsheet, creating default roles, cleaning up old
+rows, sending a nightly report. Commands run from the terminal, a deploy script or a scheduler.
+
+## Where commands live
+
+Django finds them by folder name. Create these folders (and the two empty `__init__.py` files):
+
+```text
+books/
+└── management/
+    ├── __init__.py
+    └── commands/
+        ├── __init__.py
+        ├── setup_roles.py
+        ├── import_books.py
+        └── book_stats.py
+```
+
+The file name becomes the command name: `python manage.py setup_roles`.
+
+## The anatomy of a command
+
+```python
+from django.core.management.base import BaseCommand, CommandError
+
+
+class Command(BaseCommand):                  # the class must be called Command
+    help = "Shown by: python manage.py help my_command"
+
+    def add_arguments(self, parser):         # parser is an argparse parser
+        parser.add_argument("name")                              # positional
+        parser.add_argument("--times", type=int, default=1)      # option with a value
+        parser.add_argument("--shout", action="store_true")      # flag
+
+    def handle(self, *args, **options):      # the work happens here
+        for _ in range(options["times"]):
+            text = f"Hello, {options['name']}"
+            self.stdout.write(text.upper() if options["shout"] else text)
+```
+
+- Print with `self.stdout.write()` instead of `print()`, so output can be captured in tests.
+- Style output with `self.style.SUCCESS(...)`, `WARNING`, `ERROR`.
+- Raise `CommandError("message")` for expected failures. It prints a clean message and exits with a non-zero status.
+
+## Command 1: set up roles
+
+Lesson 9 created the Librarians group by hand. A command makes it repeatable on every machine. It is written to be
+**idempotent**, meaning that running it twice gives the same result as running it once.
+
+```python title="books/management/commands/setup_roles.py"
+from django.contrib.auth.models import Group, Permission
+from django.core.management.base import BaseCommand
+
+LIBRARIAN_PERMISSIONS = ["add_book", "change_book", "delete_book"]
+
+
+class Command(BaseCommand):
+    help = "Create the Librarians group with the right permissions (safe to run repeatedly)."
+
+    def handle(self, *args, **options):
+        group, created = Group.objects.get_or_create(name="Librarians")
+        permissions = Permission.objects.filter(
+            content_type__app_label="books",
+            content_type__model="book",
+            codename__in=LIBRARIAN_PERMISSIONS,
+        )
+        group.permissions.set(permissions)           # set() replaces, so reruns do not duplicate
+
+        verb = "Created" if created else "Updated"
+        self.stdout.write(self.style.SUCCESS(f"{verb} group Librarians with {permissions.count()} permissions."))
+```
+
+## Command 2: import books from a CSV file
+
+A sample file:
+
+```csv title="books.csv"
+title,author,year,pages,genres
+Dune,Frank Herbert,1965,412,Science Fiction
+Neuromancer,William Gibson,1984,271,Science Fiction;Cyberpunk
+Emma,Jane Austen,1815,474,Classic
+```
+
+```python title="books/management/commands/import_books.py"
+import csv
+from pathlib import Path
+
+from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
+
+from books.models import Author, Book, Genre
+
+REQUIRED_COLUMNS = {"title", "author", "year"}
+
+
+class Command(BaseCommand):
+    help = "Import books from a CSV file with the columns: title, author, year, pages, genres."
+
+    def add_arguments(self, parser):
+        parser.add_argument("csv_path", type=Path, help="Path to the CSV file")
+        parser.add_argument("--dry-run", action="store_true", help="Validate and report, but save nothing")
+
+    def handle(self, *args, **options):
+        path = options["csv_path"]
+        if not path.exists():
+            raise CommandError(f"File not found: {path}")
+
+        created_count = skipped_count = 0
+
+        # atomic: either every row is saved or none is
+        with transaction.atomic():
+            with path.open(newline="", encoding="utf-8") as handle:
+                reader = csv.DictReader(handle)
+                missing = REQUIRED_COLUMNS - set(reader.fieldnames or [])
+                if missing:
+                    raise CommandError(f"Missing column(s): {', '.join(sorted(missing))}")
+
+                for line_number, row in enumerate(reader, start=2):    # line 1 is the header
+                    try:
+                        year = int(row["year"])
+                        pages = int(row.get("pages") or 0)
+                    except ValueError:
+                        raise CommandError(f"Line {line_number}: year and pages must be whole numbers")
+
+                    author, _ = Author.objects.get_or_create(name=row["author"].strip())
+                    book, created = Book.objects.get_or_create(
+                        title=row["title"].strip(),
+                        author=author,
+                        defaults={"published_year": year, "pages": pages},
+                    )
+                    if not created:
+                        skipped_count += 1
+                        continue
+
+                    created_count += 1
+                    for name in filter(None, (g.strip() for g in row.get("genres", "").split(";"))):
+                        genre, _ = Genre.objects.get_or_create(name=name)
+                        book.genres.add(genre)
+
+            if options["dry_run"]:
+                transaction.set_rollback(True)           # undo everything inside this atomic block
+
+        prefix = "[dry run] " if options["dry_run"] else ""
+        self.stdout.write(self.style.SUCCESS(f"{prefix}Imported {created_count} book(s), skipped {skipped_count} existing."))
+```
+
+Try it:
+
+```sh
+python manage.py import_books books.csv --dry-run
+python manage.py import_books books.csv
+python manage.py import_books books.csv      # run again: everything is skipped
+```
+
+Key ideas:
+
+- `get_or_create` makes the import safe to repeat.
+- `transaction.atomic()` protects the database from a half-finished import.
+- `--dry-run` is a habit worth copying for any command that changes data.
+
+## Command 3: a report
+
+```python title="books/management/commands/book_stats.py"
+from django.core.management.base import BaseCommand
+from django.db.models import Avg, Count
+
+from books.models import Author, Book, Review
+
+
+class Command(BaseCommand):
+    help = "Print a short summary of the library."
+
+    def add_arguments(self, parser):
+        parser.add_argument("--top", type=int, default=3, help="How many top-rated books to list")
+
+    def handle(self, *args, **options):
+        self.stdout.write(f"Authors: {Author.objects.count()}")
+        self.stdout.write(f"Books:   {Book.objects.count()}")
+        self.stdout.write(f"Reviews: {Review.objects.count()}")
+
+        top = (
+            Book.objects.annotate(average=Avg("reviews__rating"), total=Count("reviews"))
+            .filter(total__gt=0)
+            .order_by("-average", "title")[: options["top"]]
+        )
+        self.stdout.write("Top rated:")
+        for book in top:
+            self.stdout.write(f"  {book.title}: {book.average:.1f} ({book.total} review(s))")
+```
+
+## Running commands in production
+
+- Deploy scripts run `python manage.py migrate` and `python manage.py setup_roles` after every release (lesson 16).
+- Hosts such as Render offer scheduled jobs that run a command on a timer, for example a nightly `book_stats` email.
+- Because commands are plain Python, you can test them (lesson 15) with `call_command`.
+
+<Aside type="tip" title="Make commands safe to run twice">
+Deployments get repeated, retried and run on several servers. Prefer `get_or_create`, `update_or_create` and `set()` so a second run changes nothing, and wrap multi-step work in `transaction.atomic()`.
+</Aside>
+
+## Check yourself
+
+1. Why does `import_books` use `transaction.atomic()`?
+2. Add a `--limit` option to `import_books` that stops after that many rows. Which two places change?
+3. What is the difference between `print()` and `self.stdout.write()`?
+
+<details>
+<summary>Answers</summary>
+
+1. A failure on line 40 of a CSV would otherwise leave lines 1 to 39 saved, which makes it hard to know what happened or to rerun. With `atomic`, an error rolls everything back.
+2. `add_arguments` gets `parser.add_argument("--limit", type=int, default=None)`, and the loop in `handle` stops with `if options["limit"] and created_count >= options["limit"]: break`.
+3. `self.stdout.write()` writes to a stream that Django can redirect, so tests can capture the output with `call_command(..., stdout=StringIO())`. It also appends a newline automatically.
+
+</details>

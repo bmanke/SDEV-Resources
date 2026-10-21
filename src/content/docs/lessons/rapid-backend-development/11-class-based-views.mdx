@@ -1,0 +1,338 @@
+---
+title: "11. Class-Based Views and Mixins"
+description: "Replace repetitive function views with ListView, DetailView, CreateView, UpdateView and DeleteView, and add access rules with mixins."
+difficulty: intermediate
+readingTime: 16
+tags: [django, views, cbv, mixins]
+sidebar:
+  order: 11
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+By now many of your views follow the same shapes: list some rows, show one row, show a form and save it, confirm a delete.
+Django packages these shapes as **generic class-based views** (CBVs). You describe what is different (the model, the
+template, the queryset) and Django supplies the rest.
+
+## Function view versus class-based view
+
+```python
+# Function view: you write the control flow
+def book_list(request):
+    books = Book.objects.all()
+    return render(request, "books/book_list.html", {"books": books})
+
+# Class-based view: you configure it
+class BookListView(ListView):
+    model = Book
+```
+
+Neither is "better". Function views are explicit and easy to follow. Class-based views remove repetition for standard
+CRUD and give you **mixins** for reusable behaviour. The skill is knowing which to use.
+
+## The generic views
+
+| View | Purpose | Key attributes |
+| ---- | ------- | -------------- |
+| `TemplateView` | Render a static template | `template_name` |
+| `ListView` | A page of objects | `model` / `queryset`, `paginate_by`, `context_object_name` |
+| `DetailView` | One object | `model` / `queryset`, `pk_url_kwarg` |
+| `CreateView` | Form that inserts | `form_class`, `success_url` |
+| `UpdateView` | Form that updates | `form_class` |
+| `DeleteView` | Confirm and delete | `success_url` |
+
+## The full set of book views
+
+```python title="books/views.py"
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
+from django.core.exceptions import PermissionDenied
+from django.db.models import Avg, Count, Q
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse_lazy
+from django.views.decorators.http import require_POST
+from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
+
+from .forms import BookForm, ReviewForm
+from .models import Book, Review
+
+SORT_OPTIONS = {
+    "title": "title",
+    "newest": "-published_year",
+    "oldest": "published_year",
+    "longest": "-pages",
+}
+
+
+class HomeView(TemplateView):
+    template_name = "books/home.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)    # always call super() first
+        context["message"] = "Welcome to Book Club"
+        return context
+
+
+class BookListView(ListView):
+    model = Book
+    template_name = "books/book_list.html"
+    context_object_name = "books"          # the variable name used in the template
+    paginate_by = 10                       # adds page_obj and pagination for free
+
+    def get_queryset(self):
+        # Override get_queryset to filter, search or sort
+        queryset = (
+            Book.objects.select_related("author")
+            .prefetch_related("genres")
+            .annotate(average_rating=Avg("reviews__rating"), review_count=Count("reviews"))
+        )
+        query = self.request.GET.get("q", "").strip()
+        if query:
+            queryset = queryset.filter(Q(title__icontains=query) | Q(author__name__icontains=query))
+        sort = self.request.GET.get("sort", "title")
+        return queryset.order_by(SORT_OPTIONS.get(sort, "title"))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["query"] = self.request.GET.get("q", "").strip()
+        context["sort"] = self.request.GET.get("sort", "title")
+        return context
+
+
+class BookDetailView(DetailView):
+    template_name = "books/book_detail.html"
+    pk_url_kwarg = "book_id"               # our URL captures book_id, not the default pk
+    context_object_name = "book"
+
+    def get_queryset(self):
+        return Book.objects.select_related("author").prefetch_related("genres", "reviews__user")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["average_rating"] = self.object.reviews.aggregate(avg=Avg("rating"))["avg"]
+        return context
+
+
+class BookCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
+    form_class = BookForm
+    template_name = "books/book_form.html"
+    permission_required = "books.add_book"      # PermissionRequiredMixin checks this
+
+    def form_valid(self, form):
+        # Called when the submitted form is valid
+        form.instance.added_by = self.request.user
+        messages.success(self.request, f"Added {form.instance.title}.")
+        return super().form_valid(form)         # saves the object and redirects
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["heading"] = "Add a book"
+        return context
+
+
+class BookUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView):
+    model = Book
+    form_class = BookForm
+    template_name = "books/book_form.html"
+    pk_url_kwarg = "book_id"
+    permission_required = "books.change_book"
+
+    def form_valid(self, form):
+        messages.success(self.request, f"Updated {form.instance.title}.")
+        return super().form_valid(form)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["heading"] = f"Edit {self.object.title}"
+        return context
+
+
+class BookDeleteView(LoginRequiredMixin, PermissionRequiredMixin, DeleteView):
+    model = Book
+    pk_url_kwarg = "book_id"
+    permission_required = "books.delete_book"
+    success_url = reverse_lazy("books:book_list")    # lazy: resolved when needed, not at import
+    http_method_names = ["post"]                     # our site deletes from a button, no confirmation page
+
+    def form_valid(self, form):
+        messages.success(self.request, f"Deleted {self.object.title}.")
+        return super().form_valid(form)
+
+
+@login_required
+def review_create(request, book_id):
+    book = get_object_or_404(Book, pk=book_id)
+    existing = Review.objects.filter(book=book, user=request.user).first()
+
+    if request.method == "POST":
+        form = ReviewForm(request.POST, instance=existing)
+        if form.is_valid():
+            review = form.save(commit=False)
+            review.book = book
+            review.user = request.user
+            review.save()
+            messages.success(request, "Thanks for your review.")
+            return redirect("books:book_detail", book_id=book.pk)
+    else:
+        form = ReviewForm(instance=existing)
+    return render(request, "books/review_form.html", {"form": form, "book": book})
+
+
+class MyReviewsView(LoginRequiredMixin, ListView):
+    template_name = "books/my_reviews.html"
+    context_object_name = "reviews"
+
+    def get_queryset(self):
+        return self.request.user.reviews.select_related("book__author")
+
+
+@login_required
+@require_POST
+def review_delete(request, review_id):
+    review = get_object_or_404(Review, pk=review_id)
+    if review.user != request.user:
+        raise PermissionDenied
+    book_id = review.book_id
+    review.delete()
+    messages.success(request, "Your review was deleted.")
+    return redirect("books:book_detail", book_id=book_id)
+```
+
+In the URLs, class-based views are connected with `.as_view()`:
+
+```python title="books/urls.py"
+from django.urls import path
+
+from . import views
+
+app_name = "books"
+
+urlpatterns = [
+    path("", views.HomeView.as_view(), name="home"),
+    path("books/", views.BookListView.as_view(), name="book_list"),
+    path("books/new/", views.BookCreateView.as_view(), name="book_create"),
+    path("books/<int:book_id>/", views.BookDetailView.as_view(), name="book_detail"),
+    path("books/<int:book_id>/edit/", views.BookUpdateView.as_view(), name="book_update"),
+    path("books/<int:book_id>/delete/", views.BookDeleteView.as_view(), name="book_delete"),
+    path("books/<int:book_id>/review/", views.review_create, name="review_create"),
+    path("reviews/mine/", views.MyReviewsView.as_view(), name="my_reviews"),
+    path("reviews/<int:review_id>/delete/", views.review_delete, name="review_delete"),
+]
+```
+
+Notice that `CreateView` and `UpdateView` redirect to `get_absolute_url()` on the saved object when no `success_url` is given. Define it on the model so both know where to go:
+
+```python title="books/models.py (excerpt)"
+from django.urls import reverse
+
+class Book(models.Model):
+    ...
+    def get_absolute_url(self):
+        return reverse("books:book_detail", kwargs={"book_id": self.pk})
+```
+
+## Pagination
+
+Setting `paginate_by = 10` gives the template `page_obj`, `paginator` and `is_paginated`. Because `books` now holds only one page, the total count comes from the paginator. Replace the list template; the pager links keep the search term and sort order:
+
+```jinja title="books/templates/books/book_list.html"
+{% extends "base.html" %}
+
+{% block title %}Books | Book Club{% endblock %}
+
+{% block content %}
+  <h1>Books</h1>
+
+  <form method="get">
+    <input type="search" name="q" value="{{ query }}" placeholder="Search titles or authors">
+    <select name="sort">
+      <option value="title" {% if sort == "title" %}selected{% endif %}>Title</option>
+      <option value="newest" {% if sort == "newest" %}selected{% endif %}>Newest</option>
+      <option value="oldest" {% if sort == "oldest" %}selected{% endif %}>Oldest</option>
+      <option value="longest" {% if sort == "longest" %}selected{% endif %}>Longest</option>
+    </select>
+    <button type="submit">Search</button>
+  </form>
+
+  <p>{{ paginator.count }} book{{ paginator.count|pluralize }} found.</p>
+
+  <ul>
+    {% for book in books %}
+      <li>
+        <a href="{% url 'books:book_detail' book.id %}">{{ book.title }}</a>
+        by {{ book.author.name }} ({{ book.published_year }})
+        {% if book.review_count %}&middot; {{ book.average_rating|floatformat:1 }} / 5 from {{ book.review_count }} review{{ book.review_count|pluralize }}{% endif %}
+      </li>
+    {% empty %}
+      <li>No books found.</li>
+    {% endfor %}
+  </ul>
+
+  {% if is_paginated %}
+    <nav class="pager">
+      {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}&q={{ query|urlencode }}&sort={{ sort }}">Previous</a>
+      {% endif %}
+      Page {{ page_obj.number }} of {{ paginator.num_pages }}
+      {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}&q={{ query|urlencode }}&sort={{ sort }}">Next</a>
+      {% endif %}
+    </nav>
+  {% endif %}
+{% endblock %}
+```
+
+## Mixins
+
+A **mixin** is a small class that adds one behaviour. Python's multiple inheritance combines them. Order matters: mixins go to the **left** of the base view, and access-control mixins come first.
+
+```python
+class BookCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
+```
+
+| Mixin | Behaviour |
+| ----- | --------- |
+| `LoginRequiredMixin` | Redirect anonymous users to login |
+| `PermissionRequiredMixin` | Require `permission_required` |
+| `UserPassesTestMixin` | Run your own `test_func()` |
+
+Write your own when several views need the same rule. This one limits a view to the person who owns the object:
+
+```python
+from django.contrib.auth.mixins import UserPassesTestMixin
+
+
+class OwnerRequiredMixin(UserPassesTestMixin):
+    """Only the user in `owner_field` (or a superuser) may access the object."""
+    owner_field = "user"
+
+    def test_func(self):
+        owner = getattr(self.get_object(), self.owner_field)
+        return owner == self.request.user or self.request.user.is_superuser
+```
+
+Use it as `class ReviewDeleteView(LoginRequiredMixin, OwnerRequiredMixin, DeleteView): model = Review`. When `test_func` returns `False`, Django responds with `403`.
+
+<Aside type="tip" title="Which CBV method do I override?">
+Override `get_queryset()` to change which rows are used, `get_context_data()` to add template variables, `form_valid()` to act after a valid submission, and `get_success_url()` to choose where to go next. Reading the source on **ccbv.co.uk** (Classy Class-Based Views) is the quickest way to see the method order for any generic view.
+</Aside>
+
+## The templates stay almost the same
+
+The generic views reuse the templates you already wrote. They pass `form`, `object` (and the `context_object_name`), plus whatever you add in `get_context_data`. Only the list template needed a change (for pagination). The form and detail templates are untouched, and the delete button in `book_detail.html` still posts to the `book_delete` route, which now maps to `BookDeleteView`.
+
+## Check yourself
+
+1. Which method would you override so a `ListView` shows only the current user's reviews?
+2. Why is `reverse_lazy` used for `success_url` and not `reverse`?
+3. What happens if you write `class V(CreateView, LoginRequiredMixin)`?
+
+<details>
+<summary>Answers</summary>
+
+1. `get_queryset()`, returning `Review.objects.filter(user=self.request.user)`.
+2. `success_url` is evaluated when the class is defined, which happens while Django is still importing the URL table. `reverse_lazy` waits until the value is actually needed, so there is no circular import.
+3. The mixin comes after the generic view in the method resolution order, so `CreateView.dispatch()` runs first and the login check is skipped. Mixins must come first.
+
+</details>

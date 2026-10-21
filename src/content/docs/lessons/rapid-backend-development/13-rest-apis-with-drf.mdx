@@ -1,0 +1,363 @@
+---
+title: "13. Building a REST API with Django REST Framework"
+description: "Expose your models as JSON with serializers, API views, viewsets and routers, including validation, pagination and permissions."
+difficulty: advanced
+readingTime: 20
+tags: [django, drf, api, rest, serializers]
+sidebar:
+  order: 13
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+So far Book Club returns HTML for people. A **REST API** returns data (usually JSON) for other programs: a JavaScript
+frontend, a mobile app, another service. **Django REST Framework** (DRF) is the standard toolkit for building one on top of
+Django.
+
+## REST in one table
+
+| HTTP method | URL | Meaning | Success status |
+| ----------- | --- | ------- | -------------- |
+| `GET` | `/api/books/` | List books | `200 OK` |
+| `POST` | `/api/books/` | Create a book | `201 Created` |
+| `GET` | `/api/books/5/` | Read one book | `200 OK` |
+| `PUT` / `PATCH` | `/api/books/5/` | Replace / partially update | `200 OK` |
+| `DELETE` | `/api/books/5/` | Delete | `204 No Content` |
+
+URLs name **things** (nouns). The HTTP method is the verb.
+
+## Install and configure
+
+```sh
+pip install djangorestframework
+pip freeze > requirements.txt
+```
+
+```python title="bookclub/settings.py (excerpt)"
+INSTALLED_APPS = [
+    # ...
+    'books',
+    'accounts',
+    'rest_framework',
+]
+
+REST_FRAMEWORK = {
+    # Who is the caller? (the browser session cookie, for now)
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    # What may they do by default? Anyone can read, only logged-in users can write.
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticatedOrReadOnly",
+    ],
+    # Return lists in pages of 10
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 10,
+}
+```
+
+## Serializers
+
+A **serializer** converts model instances to plain Python data (which DRF renders as JSON) and converts incoming JSON back
+into validated Python data. It plays the same role for APIs that forms play for HTML.
+
+```python title="books/serializers.py"
+from datetime import date
+
+from rest_framework import serializers
+
+from .models import Author, Book, Genre, Review
+
+
+class AuthorSerializer(serializers.ModelSerializer):
+    book_count = serializers.IntegerField(read_only=True)    # supplied by an annotation in the view
+
+    class Meta:
+        model = Author
+        fields = ["id", "name", "born", "book_count"]
+
+
+class BookSerializer(serializers.ModelSerializer):
+    # Show the author's name next to the id (read only)
+    author_name = serializers.CharField(source="author.name", read_only=True)
+    # Genres are written and read by name, e.g. ["Classic", "Science Fiction"]
+    genres = serializers.SlugRelatedField(
+        many=True, slug_field="name", queryset=Genre.objects.all(), required=False,
+    )
+    # Computed in the queryset; omitted when the object was not loaded with the annotation
+    average_rating = serializers.FloatField(read_only=True)
+
+    class Meta:
+        model = Book
+        fields = [
+            "id", "title", "author", "author_name", "genres",
+            "published_year", "pages", "summary", "average_rating",
+        ]
+
+    def validate_title(self, value):
+        value = value.strip()
+        if value.isdigit():
+            raise serializers.ValidationError("A title cannot be only numbers.")
+        return value
+
+    def validate_published_year(self, value):
+        if not 1000 <= value <= date.today().year:
+            raise serializers.ValidationError(f"Enter a year between 1000 and {date.today().year}.")
+        return value
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField(read_only=True)    # the username, never writable by the client
+
+    class Meta:
+        model = Review
+        fields = ["id", "book", "user", "rating", "text", "created_at"]
+        read_only_fields = ["created_at"]
+        validators = []                                      # the view checks "one review per user"
+
+    def update(self, instance, validated_data):
+        validated_data.pop("book", None)                     # a review cannot be moved to another book
+        return super().update(instance, validated_data)
+```
+
+How validation works in a serializer:
+
+1. Field-level checks (type, length, `required`).
+2. `validate_<field>()` methods for one field.
+3. `validate(self, attrs)` for rules across fields.
+
+The `source="author.name"` argument follows a dotted path on the instance. `read_only=True` fields appear in output but are ignored in input.
+
+## Try a serializer in the shell
+
+```python
+>>> from books.models import Book
+>>> from books.serializers import BookSerializer
+>>> BookSerializer(Book.objects.first()).data
+{'id': 1, 'title': 'Dune', 'author': 1, 'author_name': 'Frank Herbert', 'genres': [], 'published_year': 1965, 'pages': 412, 'summary': ''}
+
+>>> s = BookSerializer(data={"title": "1984", "author": 1, "published_year": 3000, "pages": 328})
+>>> s.is_valid()
+False
+>>> s.errors
+{'published_year': [ErrorDetail(string='Enter a year between 1000 and 2026.', code='invalid')]}
+```
+
+## API views, from the bottom up
+
+DRF gives you several levels of abstraction. Understanding the lowest one makes the higher ones less magical.
+
+### Function-based: `@api_view`
+
+```python
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+
+
+@api_view(["GET"])
+def stats(request):
+    return Response({"books": Book.objects.count()})
+```
+
+`Response` takes ordinary Python data and renders JSON (or the browsable HTML page when a browser asks for it). `request.data` holds the parsed JSON body.
+
+### Class-based: `APIView`
+
+```python
+from rest_framework import status
+from rest_framework.views import APIView
+
+
+class BookListAPIView(APIView):
+    def get(self, request):
+        books = Book.objects.select_related("author")
+        return Response(BookSerializer(books, many=True).data)
+
+    def post(self, request):
+        serializer = BookSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)      # raises a 400 response with the errors
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+```
+
+This is the same list/create logic as a Django form view, but with serializers. Writing a detail view too (get, put, delete) is repetitive, so DRF has a shortcut.
+
+### Viewsets and routers
+
+A **viewset** groups all the actions for one resource in one class. A **router** then generates the URLs for you.
+
+```python title="books/api_views.py"
+from django.db.models import Avg, Count
+from rest_framework import viewsets
+from rest_framework.decorators import api_view
+from rest_framework.permissions import DjangoModelPermissionsOrAnonReadOnly
+from rest_framework.response import Response
+
+from .models import Author, Book, Review
+from .serializers import AuthorSerializer, BookSerializer
+
+
+@api_view(["GET"])
+def stats(request):
+    return Response({
+        "authors": Author.objects.count(),
+        "books": Book.objects.count(),
+        "reviews": Review.objects.count(),
+    })
+
+
+class BookViewSet(viewsets.ModelViewSet):
+    """list, create, retrieve, update, partial_update and destroy for books."""
+
+    serializer_class = BookSerializer
+    # The same rules as the website: reading is public, writing needs add_/change_/delete_book permissions
+    permission_classes = [DjangoModelPermissionsOrAnonReadOnly]
+
+    def get_queryset(self):
+        return (
+            Book.objects.select_related("author")
+            .prefetch_related("genres")
+            .annotate(average_rating=Avg("reviews__rating"))
+            .order_by("title")
+        )
+
+    def perform_create(self, serializer):
+        # Called inside create(); pass extra values that the client must not choose
+        serializer.save(added_by=self.request.user)
+
+
+class AuthorViewSet(viewsets.ReadOnlyModelViewSet):
+    """Only list and retrieve."""
+
+    serializer_class = AuthorSerializer
+
+    def get_queryset(self):
+        return Author.objects.annotate(book_count=Count("books")).order_by("name")
+```
+
+```python title="books/api_urls.py"
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
+
+from . import api_views
+
+app_name = "api"
+
+router = DefaultRouter()
+router.register("books", api_views.BookViewSet, basename="book")
+router.register("authors", api_views.AuthorViewSet, basename="author")
+
+urlpatterns = [
+    path("stats/", api_views.stats, name="stats"),
+    path("", include(router.urls)),
+]
+```
+
+Mount the API under `/api/` and add DRF's login page for the browsable API:
+
+```python title="bookclub/urls.py"
+from django.conf import settings
+from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import include, path
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("api/", include("books.api_urls")),
+    path("api-auth/", include("rest_framework.urls")),
+    path("accounts/", include("accounts.urls")),
+    path("accounts/", include("django.contrib.auth.urls")),
+    path("", include("books.urls")),
+]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+```
+
+The router created these routes:
+
+| URL | Methods | Action |
+| --- | ------- | ------ |
+| `/api/books/` | GET, POST | `list`, `create` |
+| `/api/books/<id>/` | GET, PUT, PATCH, DELETE | `retrieve`, `update`, `partial_update`, `destroy` |
+| `/api/authors/` and `/api/authors/<id>/` | GET | read only |
+| `/api/` | GET | An index page that links to every registered viewset |
+
+## Calling the API
+
+Start the server and open `http://127.0.0.1:8000/api/books/` in a browser. DRF's **browsable API** lets you read and submit data from the page. From a terminal:
+
+```sh
+curl http://127.0.0.1:8000/api/books/
+```
+
+```json
+{
+  "count": 2,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 1,
+      "title": "Dune",
+      "author": 1,
+      "author_name": "Frank Herbert",
+      "genres": ["Science Fiction"],
+      "published_year": 1965,
+      "pages": 412,
+      "summary": "",
+      "average_rating": 5.0
+    }
+  ]
+}
+```
+
+Notice the `count`, `next`, `previous`, `results` wrapper from pagination. Try `?page=2`.
+
+An error response is JSON too, with a helpful status code:
+
+```sh
+curl -X POST http://127.0.0.1:8000/api/books/ -H "Content-Type: application/json" \
+     -d '{"title": "Neuromancer", "author": 2}'
+```
+
+```text
+HTTP 403 Forbidden
+{"detail": "Authentication credentials were not provided."}
+```
+
+Authenticated clients are the subject of the next lesson.
+
+## Status codes you will return
+
+| Code | When |
+| ---- | ---- |
+| `200` | Success with a body |
+| `201` | A resource was created |
+| `204` | Success with no body (delete) |
+| `400` | Validation failed; the body lists the field errors |
+| `401` / `403` | Not authenticated / not allowed |
+| `404` | No such resource |
+
+<Aside type="tip" title="Keep the queryset efficient">
+Serializers walk relationships. If `BookSerializer` prints `author_name` and `genres`, a plain `Book.objects.all()` runs a query per book for each. The `select_related` and `prefetch_related` calls from lesson 6 matter just as much here.
+</Aside>
+
+<Aside type="note" title="Create responses and annotations">
+`average_rating` comes from an annotation on the list and detail querysets. A book that was just created has no annotation, so the field is left out of the `201` response. Fetch the book again if a client needs it.
+</Aside>
+
+## Check yourself
+
+1. What is the difference between a `Serializer` and a `ModelSerializer`?
+2. Which viewset base class would you use for a resource that clients can only read?
+3. Why does `perform_create` call `serializer.save(added_by=...)` instead of accepting `added_by` in the JSON body?
+
+<details>
+<summary>Answers</summary>
+
+1. `Serializer` needs every field written by hand. `ModelSerializer` inspects a model and generates the fields and default validation for you (you can still override or add fields).
+2. `ReadOnlyModelViewSet`, which provides only `list` and `retrieve`.
+3. Anything in the body is controlled by the client. The owner must come from the authenticated request, otherwise a user could claim someone else's identity.
+
+</details>
