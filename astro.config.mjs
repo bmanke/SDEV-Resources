@@ -31,11 +31,6 @@ export default defineConfig({
 				'@fontsource-variable/jetbrains-mono',
 				'./src/styles/custom.css',
 			],
-			// Swap or extend any built-in Starlight component.
-			components: {
-				PageTitle: './src/components/overrides/PageTitle.astro',
-				Footer: './src/components/overrides/Footer.astro',
-			},
 			// Full-text search is powered by Pagefind and is ON by default.
 			// It indexes the site during `astro build` (search is unavailable in `astro dev`).
 			pagefind: true,
