@@ -14,10 +14,6 @@ export default defineConfig({
 			title: 'Software Development Resources',
 			description:
 				'A repository with code comments on exercises and assignments.',
-			logo: {
-				src: './src/assets/logo.svg',
-				replacesTitle: false,
-			},
 			favicon: '/favicon.svg',
 			social: [
 				{ icon: 'github', label: 'GitHub repository: report issues and send pull requests', href: 'https://github.com/bmanke/SDEV-Resources' },
@@ -29,7 +25,6 @@ export default defineConfig({
 			customCss: [
 				'@fontsource-variable/inter',
 				'@fontsource-variable/jetbrains-mono',
-				'./src/styles/custom.css',
 			],
 			// Full-text search is powered by Pagefind and is ON by default.
 			// It indexes the site during `astro build` (search is unavailable in `astro dev`).
