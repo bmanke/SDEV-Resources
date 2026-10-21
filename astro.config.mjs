@@ -15,7 +15,6 @@ export default defineConfig({
 			description:
 				'A repository with code comments on exercises and assignments.',
 			logo: {
-				src: './src/assets/logo.svg',
 				replacesTitle: false,
 			},
 			favicon: '/favicon.svg',
