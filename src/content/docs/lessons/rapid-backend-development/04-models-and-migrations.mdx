@@ -1,0 +1,235 @@
+---
+title: "4. Models, Migrations and the Admin"
+description: "Describe your data in Python, create the database tables with migrations, and manage records with the admin site."
+difficulty: intermediate
+readingTime: 16
+tags: [django, models, orm, migrations, admin]
+sidebar:
+  order: 4
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Websites store information: books, members, reviews. Django's **ORM** (Object-Relational Mapper) lets you describe that
+data as Python classes called **models**. Each model becomes a database table, each attribute becomes a column and each
+instance becomes a row. You rarely write SQL by hand.
+
+## Defining models
+
+```python title="books/models.py"
+from django.db import models
+
+
+class Author(models.Model):
+    name = models.CharField(max_length=120)
+    born = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Book(models.Model):
+    title = models.CharField(max_length=200)
+    author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name="books")
+    published_year = models.PositiveSmallIntegerField()
+    pages = models.PositiveIntegerField(default=0)
+    summary = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["title"]
+
+    def __str__(self):
+        return self.title
+```
+
+Things to notice:
+
+- Every model inherits from `models.Model`.
+- Django adds an automatic `id` primary key.
+- Each attribute is a **field** that decides the column type and its validation.
+- `__str__` controls how the object is displayed in the admin and the shell. Always define it.
+- `class Meta` holds options such as the default `ordering`.
+- `ForeignKey` links each book to one author (relationships are covered in depth in lesson 6).
+
+### Common field types
+
+| Field | Stores | Notable options |
+| ----- | ------ | --------------- |
+| `CharField` | Short text | `max_length` (required) |
+| `TextField` | Long text | |
+| `IntegerField`, `PositiveIntegerField` | Whole numbers | |
+| `DecimalField` | Exact decimals (money) | `max_digits`, `decimal_places` |
+| `FloatField` | Approximate decimals | |
+| `BooleanField` | True or False | `default` |
+| `DateField`, `DateTimeField` | Dates and times | `auto_now_add`, `auto_now` |
+| `EmailField`, `URLField` | Validated text | |
+| `SlugField` | URL-friendly text | |
+| `ImageField`, `FileField` | Uploaded files (lesson 10) | `upload_to` |
+| `ForeignKey`, `ManyToManyField`, `OneToOneField` | Relationships | `on_delete`, `related_name` |
+
+### Options shared by every field
+
+| Option | Meaning |
+| ------ | ------- |
+| `null=True` | The **database** may store `NULL` |
+| `blank=True` | The **form** may leave it empty |
+| `default=...` | Value used when none is given |
+| `unique=True` | No two rows may share this value |
+| `choices=[...]` | Restrict to a list of values |
+| `validators=[...]` | Extra validation rules |
+
+For text fields, prefer `blank=True` with an empty-string default instead of `null=True`, so there is only one way to say "empty".
+
+## Migrations
+
+Changing a model does not change the database by itself. Django tracks changes through **migrations**, versioned files that describe how to alter the schema.
+
+```sh
+python manage.py makemigrations     # compare models to existing migrations, write a new file
+python manage.py migrate            # run unapplied migrations against the database
+```
+
+```text
+Migrations for 'books':
+  books/migrations/0001_initial.py
+    + Create model Author
+    + Create model Book
+```
+
+Useful extras:
+
+| Command | Purpose |
+| ------- | ------- |
+| `python manage.py showmigrations` | Which migrations are applied |
+| `python manage.py sqlmigrate books 0001` | Show the SQL a migration would run |
+| `python manage.py migrate books 0001` | Roll the app back to a specific migration |
+
+<Aside type="caution" title="Commit migration files">
+Migration files are part of your source code. Commit them so teammates and the production server build the same database. Never edit or delete a migration that has already been applied elsewhere. Make a new one instead.
+</Aside>
+
+Whenever you add, rename or change a field, repeat the cycle: **edit model, makemigrations, migrate**.
+
+## The admin site
+
+Django ships with a ready-made management interface. Register your models to use it.
+
+```python title="books/admin.py"
+from django.contrib import admin
+
+from .models import Author, Book
+
+
+@admin.register(Author)
+class AuthorAdmin(admin.ModelAdmin):
+    list_display = ("name", "born")
+    search_fields = ("name",)
+
+
+@admin.register(Book)
+class BookAdmin(admin.ModelAdmin):
+    list_display = ("title", "author", "published_year", "pages")
+    list_filter = ("published_year",)
+    search_fields = ("title", "author__name")
+```
+
+Create an administrator and open `http://127.0.0.1:8000/admin/`:
+
+```sh
+python manage.py createsuperuser
+```
+
+You can now add authors and books, search, filter and edit them with no extra code. The admin is for trusted staff. Build proper pages for everyone else.
+
+## Adding data from the shell
+
+```sh
+python manage.py shell
+```
+
+```python
+>>> from books.models import Author, Book
+>>> herbert = Author.objects.create(name="Frank Herbert", born=1920)
+>>> Book.objects.create(title="Dune", author=herbert, published_year=1965, pages=412)
+<Book: Dune>
+>>> Book.objects.count()
+1
+```
+
+## Using models in views
+
+Replace the sample list with real data. `get_object_or_404` fetches one row or raises `Http404` for you.
+
+```python title="books/views.py"
+from django.shortcuts import get_object_or_404, render
+
+from .models import Book
+
+
+def home(request):
+    return render(request, "books/home.html", {"message": "Welcome to Book Club"})
+
+
+def book_list(request):
+    books = Book.objects.select_related("author")
+    return render(request, "books/book_list.html", {"books": books})
+
+
+def book_detail(request, book_id):
+    book = get_object_or_404(Book, pk=book_id)
+    return render(request, "books/book_detail.html", {"book": book})
+```
+
+The templates change slightly because the data is now objects with related objects:
+
+```jinja title="books/templates/books/book_list.html"
+{% extends "base.html" %}
+
+{% block title %}Books | Book Club{% endblock %}
+
+{% block content %}
+  <h1>Books</h1>
+  <ul>
+    {% for book in books %}
+      <li>
+        <a href="{% url 'books:book_detail' book.id %}">{{ book.title }}</a>
+        by {{ book.author.name }} ({{ book.published_year }})
+      </li>
+    {% empty %}
+      <li>No books yet.</li>
+    {% endfor %}
+  </ul>
+{% endblock %}
+```
+
+```jinja title="books/templates/books/book_detail.html"
+{% extends "base.html" %}
+
+{% block title %}{{ book.title }} | Book Club{% endblock %}
+
+{% block content %}
+  <h1>{{ book.title }}</h1>
+  <p>by {{ book.author.name }}, {{ book.published_year }} &middot; {{ book.pages }} pages</p>
+  {% if book.summary %}<p>{{ book.summary }}</p>{% endif %}
+  <p><a href="{% url 'books:book_list' %}">&larr; All books</a></p>
+{% endblock %}
+```
+
+## Check yourself
+
+1. Add a `BooleanField` named `is_available` to `Book` that defaults to `True`. What two commands apply the change?
+2. What is the difference between `null=True` and `blank=True`?
+3. Why does `makemigrations` produce no file after you only edit a `__str__` method?
+
+<details>
+<summary>Answers</summary>
+
+1. Add `is_available = models.BooleanField(default=True)`, then run `python manage.py makemigrations` and `python manage.py migrate`. A default is required so existing rows get a value.
+2. `null` is about the database (allow `NULL`). `blank` is about validation (allow an empty form value).
+3. Methods such as `__str__` live only in Python and never touch the database, so there is nothing to migrate. (Changes to `class Meta` options such as `ordering` do create a small migration, even though the table columns stay the same.)
+
+</details>

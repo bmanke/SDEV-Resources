@@ -1,0 +1,53 @@
+---
+title: Shared State Across Islands
+description: Two separate Svelte islands that share one module-level rune store.
+difficulty: advanced
+readingTime: 4
+tags: [svelte, islands, stores]
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import TokenControls from '../../../components/widgets/TokenControls.svelte';
+import TokenPreview from '../../../components/widgets/TokenPreview.svelte';
+
+These are two **separate islands**, each with its own `client:load` directive and its own component tree.
+Prose sits between them on purpose. They still share state, because both import the same instance from
+`src/lib/stores/design-tokens.svelte.ts`.
+
+<TokenControls client:load />
+
+The controls above write to the store. The preview below only reads from it. Change a slider and
+watch the update counter go up.
+
+<TokenPreview client:load />
+
+## The store
+
+```ts title="src/lib/stores/design-tokens.svelte.ts"
+class DesignTokens {
+	hue = $state(18);
+	radius = $state<'square' | 'rounded' | 'pill'>('rounded');
+	size = $state(16);
+	label = $state('Get started');
+
+	color = $derived(`hsl(${this.hue} 100% 56%)`);
+	radiusPx = $derived(this.radius === 'square' ? 2 : this.radius === 'rounded' ? 8 : 999);
+}
+
+export const designTokens = new DesignTokens();
+```
+
+## Using it in an island
+
+```svelte title="TokenControls.svelte"
+<script lang="ts">
+	import { designTokens as t } from '../../lib/stores/design-tokens.svelte';
+</script>
+
+<input type="range" min="0" max="360" bind:value={t.hue} />
+```
+
+<Aside type="caution" title="Why not setContext?">
+	Svelte context only passes down a single component tree. Each Astro island is its own root,
+	so context can't reach from one island to another. A shared module can.
+</Aside>

@@ -1,0 +1,25 @@
+---
+title: Widget Components
+description: Props for every Svelte widget in the template.
+tags: [reference, svelte]
+sidebar:
+  order: 3
+---
+
+All widgets live in `src/components/widgets/`. They use Starlight CSS variables, so they follow the current theme.
+Add `class="not-content"` to a widget's root element so Starlight's prose styles don't apply inside it.
+
+| Component                     | Props                                                       | State model                         |
+| ----------------------------- | ----------------------------------------------------------- | ----------------------------------- |
+| `Counter.svelte`              | `start?: number`, `step?: number`, `label?: string`         | Local `$state` + `$derived`          |
+| `StatePlayground.svelte`      | none                                                        | Local runes, snapshots, `$effect`    |
+| `TokenControls.svelte`        | none                                                        | Writes to the shared rune store      |
+| `TokenPreview.svelte`         | none                                                        | Reads from the shared rune store     |
+| `PackageManagerPicker.svelte` | none                                                        | Persisted `svelte/store`             |
+| `InstallCommand.svelte`       | `pkg: string`, `dev?: boolean`                              | Reads from the persisted store       |
+
+## Adding a widget
+
+1. Create `src/components/widgets/MyWidget.svelte`.
+2. Import it in an `.mdx` page.
+3. Render it with a hydration directive, for example `<MyWidget client:visible />`.

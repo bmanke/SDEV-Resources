@@ -1,0 +1,294 @@
+---
+title: "8. Conditional Rendering"
+description: "Show different UI for different situations with if, the ternary and &&, then filter lists and handle empty states."
+difficulty: beginner
+readingTime: 17
+tags: [react, conditional-rendering, lists, keys]
+sidebar:
+  order: 8
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A real interface is rarely the same all the time. It shows a spinner while loading, a message when a list is empty, an error when something fails, and different buttons depending on the user's choices. In React you do not hide and show elements by hand. You write ordinary JavaScript conditions and return different JSX.
+
+## Four ways to render conditionally
+
+### 1. `if` with an early return
+
+Best when a component looks completely different in different situations.
+
+```jsx title="src/components/MovieList.jsx"
+import MovieCard from './MovieCard.jsx';
+
+export default function MovieList({ movies, favoriteIds, onToggleFavorite }) {
+  if (movies.length === 0) {
+    return <p className="empty">No movies match your filters.</p>;
+  }
+
+  return (
+    <ul className="movie-list">
+      {movies.map((movie) => (
+        <li key={movie.id}>
+          <MovieCard
+            {...movie}
+            isFavorite={favoriteIds.includes(movie.id)}
+            onToggleFavorite={onToggleFavorite}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+An empty state tells the user what is going on instead of showing a blank space.
+
+### 2. The ternary operator
+
+Use `condition ? a : b` inside JSX to choose between two pieces of markup. It is an expression, so it fits inside braces.
+
+```jsx
+<button type="button" onClick={() => onToggleFavorite(id)}>
+  {isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+</button>
+```
+
+You can choose whole elements, too:
+
+```jsx
+{favoriteIds.length > 0 ? (
+  <p>Favorites: {favoriteIds.length}</p>
+) : (
+  <p>No favorites yet. Add one with the button on a card.</p>
+)}
+```
+
+### 3. Logical AND (`&&`)
+
+Use `condition && element` when you want something or nothing.
+
+```jsx
+{isFiltering && (
+  <button type="button" onClick={clearFilters}>
+    Clear filters
+  </button>
+)}
+```
+
+If the condition is true you get the element, and if it is false React renders nothing.
+
+<Aside type="caution" title="The 0 trap">
+`false`, `null` and `undefined` render nothing, but the number `0` does render. So `{items.length && <List />}` shows a stray **0** on screen when the array is empty. Make the condition a real boolean: `{items.length > 0 && <List />}`.
+</Aside>
+
+### 4. Store JSX in a variable
+
+When there are several cases, build the content with ordinary `if` statements before the `return`, then place it in the markup.
+
+```jsx
+let content;
+if (status === 'loading') {
+  content = <p>Loading movies...</p>;
+} else if (status === 'error') {
+  content = <p role="alert">Something went wrong.</p>;
+} else {
+  content = <MovieList movies={visibleMovies} />;
+}
+
+return <Panel title="All movies">{content}</Panel>;
+```
+
+Lesson 9 uses exactly this pattern for loading and error states.
+
+| Technique | Use it when |
+| --------- | ----------- |
+| `if` / early `return` | The whole component changes |
+| Ternary `? :` | Two alternatives inline |
+| `&&` | One optional piece |
+| Variable | Three or more cases |
+
+Returning `null` from a component renders nothing at all, which is useful for components that are sometimes not needed.
+
+## A "New" badge
+
+A small conditional inside the card marks recent movies:
+
+```jsx title="src/components/MovieCard.jsx (the title line)"
+<h3 className={styles.title}>
+  {title}
+  {year >= 2023 && <span className={styles.badge}>New</span>}
+</h3>
+```
+
+`year >= 2023` is always a boolean, so there is no 0 trap. Add the style to the card's CSS module:
+
+```css title="src/components/MovieCard.module.css (add at the bottom)"
+.badge {
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+  font-size: 0.75rem;
+  vertical-align: middle;
+}
+```
+
+## Filtering with the sidebar
+
+The sidebar lists the genres and tells the parent which one the user picked. The genre buttons are generated from the `genres` array in the data file, plus an "All" option.
+
+```jsx title="src/components/Sidebar.jsx"
+import { genres } from '../data/movies.js';
+
+export default function Sidebar({ selectedGenre, onSelectGenre }) {
+  const options = ['All', ...genres];
+
+  return (
+    <aside className="sidebar">
+      <h2>Genres</h2>
+      <ul>
+        {options.map((genre) => (
+          <li key={genre}>
+            <button
+              type="button"
+              aria-pressed={genre === selectedGenre}
+              onClick={() => onSelectGenre(genre)}
+            >
+              {genre}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  );
+}
+```
+
+`aria-pressed` tells assistive technology which button is selected. Style it in `index.css` so sighted users can see it too:
+
+```css title="src/index.css (add at the bottom)"
+.sidebar button[aria-pressed='true'] {
+  background: var(--accent);
+  color: white;
+}
+```
+
+Now `App` keeps both filters in state and combines them. It also shows the "Clear filters" button only while a filter is active.
+
+```jsx title="src/App.jsx"
+import { useState } from 'react';
+import Header from './components/Header.jsx';
+import Sidebar from './components/Sidebar.jsx';
+import SearchBar from './components/SearchBar.jsx';
+import Panel from './components/Panel.jsx';
+import MovieList from './components/MovieList.jsx';
+import AddMovieForm from './components/AddMovieForm.jsx';
+import { movies as initialMovies } from './data/movies.js';
+
+export default function App() {
+  const [movies, setMovies] = useState(initialMovies);
+  const [favoriteIds, setFavoriteIds] = useState([]);
+  const [query, setQuery] = useState('');
+  const [genre, setGenre] = useState('All');
+
+  const visibleMovies = movies.filter(
+    (movie) =>
+      (genre === 'All' || movie.genre === genre) &&
+      movie.title.toLowerCase().includes(query.trim().toLowerCase()),
+  );
+  const isFiltering = query !== '' || genre !== 'All';
+
+  function toggleFavorite(id) {
+    setFavoriteIds((ids) =>
+      ids.includes(id) ? ids.filter((existing) => existing !== id) : [...ids, id],
+    );
+  }
+
+  function addMovie(movie) {
+    setMovies((current) => {
+      const nextId = Math.max(0, ...current.map((m) => m.id)) + 1;
+      return [...current, { ...movie, id: nextId }];
+    });
+  }
+
+  function clearFilters() {
+    setQuery('');
+    setGenre('All');
+  }
+
+  return (
+    <>
+      <Header />
+      <div className="layout">
+        <Sidebar selectedGenre={genre} onSelectGenre={setGenre} />
+        <main>
+          <SearchBar value={query} onChange={setQuery} />
+          <Panel title={genre === 'All' ? 'All movies' : genre}>
+            {favoriteIds.length > 0 ? (
+              <p>Favorites: {favoriteIds.length}</p>
+            ) : (
+              <p>No favorites yet. Add one with the button on a card.</p>
+            )}
+            {isFiltering && (
+              <button type="button" onClick={clearFilters}>
+                Clear filters
+              </button>
+            )}
+            <MovieList
+              movies={visibleMovies}
+              favoriteIds={favoriteIds}
+              onToggleFavorite={toggleFavorite}
+            />
+          </Panel>
+          <AddMovieForm onAdd={addMovie} />
+        </main>
+      </div>
+    </>
+  );
+}
+```
+
+Try it: pick a genre, type a search that matches nothing, and watch the empty-state message appear, then press Clear filters.
+
+## Keys, in more depth
+
+You used `key` in Lesson 4. Here is why it matters. React uses keys to decide which item is which between renders, so it can keep each item's state and DOM with the right data.
+
+1. **Use a stable, unique id** from your data (`movie.id`). Strings and numbers both work.
+2. **Avoid the array index** as the key for lists that can be reordered, filtered or have items removed.
+3. **Never generate keys during render** with `Math.random()` or `Date.now()`.
+
+Index keys cause real bugs. Imagine a list of rows, each with a text field, keyed by index. You type a note in the first row and delete that row. The second row slides into index 0, React reuses the first row's DOM node for it, and your note now appears next to the wrong item. With `key={item.id}` the note is removed with its row, as you would expect.
+
+An index key is fine only for a list that never changes order or length.
+
+## Check yourself
+
+1. Render "Welcome back" when `isLoggedIn` is true and "Please sign in" when it is false, using a ternary.
+2. Why is `{count && <Badge />}` risky when `count` can be 0? Rewrite it.
+3. Make `MovieList` show "Loading..." when a `loading` prop is true, before anything else, using an early return.
+4. A list of tasks is keyed by index. What can go wrong when you delete a task from the middle?
+
+<details>
+<summary>Answers</summary>
+
+```jsx
+// 1
+<p>{isLoggedIn ? 'Welcome back' : 'Please sign in'}</p>
+
+// 2: when count is 0 React renders the number 0. Compare to make a real boolean.
+{count > 0 && <Badge />}
+
+// 3
+export default function MovieList({ movies, loading }) {
+  if (loading) return <p>Loading...</p>;
+  if (movies.length === 0) return <p>No movies found.</p>;
+  return <ul>{/* ... */}</ul>;
+}
+```
+
+4. Every task after the deleted one gets a new index, so React matches them to the wrong previous items. Any state tied to a row, such as an input's text or a checkbox, can end up attached to a different task. Use a unique `id` as the key.
+
+</details>

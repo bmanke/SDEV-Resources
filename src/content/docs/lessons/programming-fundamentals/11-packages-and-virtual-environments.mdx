@@ -1,0 +1,153 @@
+---
+title: "11. Packages and Virtual Environments"
+description: "Install third-party libraries safely with venv and pip, then use pandas and Flask in small projects."
+difficulty: intermediate
+readingTime: 14
+tags: [python, pip, venv, pandas, flask]
+sidebar:
+  order: 11
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Python's real power comes from the huge ecosystem of packages other developers have shared on **PyPI**, the Python
+Package Index. You install them with `pip`, and you keep each project's packages separate with a **virtual environment**.
+
+## Why a virtual environment?
+
+Project A may need version 1 of a library while project B needs version 2. If everything installs into one global
+place, the projects fight. A virtual environment is a private folder of packages for a single project.
+
+If you have used Node, it is similar to `node_modules`, with one extra step: you activate it.
+
+## The workflow
+
+Run these from your project folder.
+
+```sh
+# 1. Create the environment (once). The folder is usually called venv or .venv
+python -m venv venv
+
+# 2. Activate it (every time you open a new terminal)
+venv\Scripts\activate          # Windows
+source venv/bin/activate       # macOS and Linux
+
+# 3. Install what you need
+pip install requests
+
+# 4. Record the exact versions so others can recreate your setup
+pip freeze > requirements.txt
+
+# Later, on another computer:
+pip install -r requirements.txt
+```
+
+When the environment is active your prompt starts with `(venv)`. Leave it with `deactivate`.
+
+<Aside type="caution" title="Do not commit venv to Git">
+The `venv` folder is large and specific to your computer. Add it to `.gitignore` and commit only `requirements.txt`.
+</Aside>
+
+## Using a package
+
+```python title="joke_check.py"
+import requests                       # installed with pip, not part of the standard library
+
+response = requests.get("https://api.github.com/zen")
+print(response.status_code)           # 200 means success
+print(response.text)                  # a random bit of GitHub wisdom
+```
+
+## Data analysis with pandas
+
+**pandas** is the standard Python tool for tables of data, and **Jupyter** lets you run code in small cells and see results immediately.
+
+```sh
+pip install pandas matplotlib jupyter
+```
+
+```python title="analysis.py"
+import pandas as pd
+import matplotlib.pyplot as plt
+
+teams = pd.read_csv("teams.csv")          # a table (DataFrame) from a CSV file
+
+print(teams.head())                       # first five rows
+print(teams.describe())                   # count, mean, min, max of numeric columns
+
+teams["win_pct"] = teams["wins"] / (teams["wins"] + teams["losses"])
+best = teams.sort_values("win_pct", ascending=False).head(3)
+print(best[["team", "win_pct"]])
+
+teams.plot(kind="bar", x="team", y="wins", legend=False)
+plt.title("Wins by team")
+plt.ylabel("Wins")
+plt.tight_layout()
+plt.show()
+```
+
+Compare this with the `csv` module from lesson 9: reading the file, converting types and summarizing take a few lines instead of many loops.
+
+## A tiny web API with Flask
+
+**Flask** is a lightweight framework for building web servers. Each function decorated with `@app.route` answers one URL.
+
+```python title="app.py"
+from flask import Flask, jsonify, request
+
+app = Flask(__name__)
+
+SIGHTINGS = [
+    {"city": "Edmonton", "shape": "light"},
+    {"city": "Calgary", "shape": "triangle"},
+    {"city": "Edmonton", "shape": "disk"},
+]
+
+@app.route("/")
+def home():
+    return "UFO sightings API"
+
+@app.route("/sightings")
+def sightings():
+    # /sightings?city=Edmonton filters by the query parameter
+    city = request.args.get("city")
+    results = SIGHTINGS
+    if city:
+        results = [s for s in SIGHTINGS if s["city"].lower() == city.lower()]
+    return jsonify(results)
+
+if __name__ == "__main__":
+    app.run(debug=True)
+```
+
+Install Flask (`pip install flask`), run `python app.py`, then open `http://127.0.0.1:5000/sightings?city=edmonton`.
+The browser receives JSON. This is the same kind of data that a JavaScript `fetch` call will consume in the frontend course.
+
+## Check yourself
+
+1. List the commands to create, activate and populate a virtual environment for a new project that needs `pandas`.
+2. Add a `/count` route to the Flask app that returns how many sightings exist.
+3. Using pandas, print only the rows of `teams` where `wins` is at least 45.
+
+<details>
+<summary>Solutions</summary>
+
+```sh
+# 1
+python -m venv venv
+venv\Scripts\activate        # or: source venv/bin/activate
+pip install pandas
+pip freeze > requirements.txt
+```
+
+```python
+# 2
+@app.route("/count")
+def count():
+    return jsonify({"count": len(SIGHTINGS)})
+
+# 3
+print(teams[teams["wins"] >= 45])
+```
+
+</details>

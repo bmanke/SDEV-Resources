@@ -1,0 +1,59 @@
+---
+title: Persisted Stores
+description: A svelte/store that saves to localStorage and syncs across tabs and islands.
+difficulty: intermediate
+readingTime: 3
+tags: [svelte, stores, localStorage]
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import PackageManagerPicker from '../../../components/widgets/PackageManagerPicker.svelte';
+import InstallCommand from '../../../components/widgets/InstallCommand.svelte';
+
+Pick a package manager. Every install command on this page updates, and your choice is still
+there after a reload. Open this page in a second tab and change it there: this tab updates too.
+
+<PackageManagerPicker client:load />
+
+Install the Svelte integration:
+
+<InstallCommand client:load pkg="@astrojs/svelte svelte" />
+
+Add a dev dependency:
+
+<InstallCommand client:load pkg="@astrojs/check typescript" dev />
+
+## How it works
+
+```ts title="src/lib/stores/persisted.ts"
+export function persisted<T>(key: string, initial: T) {
+	const store = writable<T>(read(key, initial), (set) => {
+		// Sync across tabs
+		const onStorage = (e: StorageEvent) => e.key === key && set(JSON.parse(e.newValue!));
+		addEventListener('storage', onStorage);
+		return () => removeEventListener('storage', onStorage);
+	});
+	return {
+		...store,
+		set(value: T) {
+			localStorage.setItem(key, JSON.stringify(value));
+			store.set(value);
+		},
+	};
+}
+
+export const packageManager = persisted('docs:package-manager', 'npm');
+```
+
+In a component, `$packageManager` subscribes automatically:
+
+```svelte
+<script lang="ts">
+	import { packageManager } from '../../lib/stores/persisted';
+	const command = $derived(`${$packageManager} add ${pkg}`);
+</script>
+```
+
+<Aside type="note">
+	The store is SSR-safe. On the server it returns the initial value, and on the client it reads from `localStorage` when the island hydrates.
+</Aside>

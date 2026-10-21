@@ -1,0 +1,56 @@
+---
+title: "Rapid Backend Development"
+description: "SDEV-2401: a step-by-step Django path from your first project to a tested REST API deployed in the cloud."
+sidebar:
+  label: Overview
+  order: 0
+---
+
+A step-by-step path through backend web development with Python and Django for SDEV-2401. Every lesson builds one piece of **Book Club**, a site where members browse books, librarians manage them, and members post reviews. The same data is then exposed as a REST API, tested and deployed. The code was assembled lesson by lesson, run against Django 5.2 and Django REST Framework, and covered by the test suite in lesson 15.
+
+## Before you start
+
+- Comfortable with Python functions, classes, modules and virtual environments (see Programming Fundamentals).
+- Basic HTML. A little JavaScript helps for the API lessons, but is not required.
+- Python 3.10 or newer and a code editor.
+
+## How to use these lessons
+
+1. Go in order. Each lesson changes the same project, and files shown in full replace the previous version.
+2. **Type the examples yourself** instead of pasting them, and change them to see what breaks.
+3. Run `python manage.py check` and the development server often. Read error pages from the bottom up.
+4. Do the "Check yourself" exercises before opening the answers.
+
+## The project at a glance
+
+```text
+Book Club
+├── books/            models, forms, views, templates, REST API, commands, tests
+├── accounts/         sign up (login and logout use Django's built-in views)
+├── templates/        base layout, login and signup pages, 403 page
+├── static/css/       site styles
+└── bookclub/         settings and the root URL table
+```
+
+## Lessons
+
+| Lesson | What you will learn | Level | Time |
+| ------ | ------------------- | ----- | ---- |
+| [1. Django Foundations](/lessons/rapid-backend-development/01-django-foundations/) | Set up a virtual environment, create a project and app, understand the request cycle, and serve a first page | Beginner | 14 min |
+| [2. URLs and Views](/lessons/rapid-backend-development/02-urls-and-views/) | Route URLs to views, capture values from the path, read query strings and return different responses | Beginner | 14 min |
+| [3. Templates](/lessons/rapid-backend-development/03-templates/) | Generate HTML with variables, tags, filters, template inheritance and static files | Beginner | 15 min |
+| [4. Models, Migrations and the Admin](/lessons/rapid-backend-development/04-models-and-migrations/) | Describe data as Python models, create tables with migrations, and manage records in the admin | Intermediate | 16 min |
+| [5. Querying with the ORM](/lessons/rapid-backend-development/05-querying-with-the-orm/) | Create, filter, order, aggregate and update rows with QuerySets, Q objects and F expressions | Intermediate | 18 min |
+| [6. Relationships Between Models](/lessons/rapid-backend-development/06-relationships/) | Model one-to-many, many-to-many and one-to-one links and avoid the N+1 query problem | Intermediate | 17 min |
+| [7. Forms, Validation and Sanitization](/lessons/rapid-backend-development/07-forms/) | Accept input safely with forms and ModelForms, validate and clean it, and use post/redirect/get | Intermediate | 18 min |
+| [8. Authentication](/lessons/rapid-backend-development/08-authentication/) | Register, log in and log out users, and protect pages with Django's built-in authentication | Intermediate | 17 min |
+| [9. Authorization, Permissions and User-Specific Data](/lessons/rapid-backend-development/09-authorization/) | Control who can do what with permissions, groups, ownership checks and user-scoped querysets | Intermediate | 17 min |
+| [10. Static Files, Media and File Uploads](/lessons/rapid-backend-development/10-file-uploads/) | Serve CSS and images, accept uploads with FileField and ImageField, and validate files | Intermediate | 15 min |
+| [11. Class-Based Views and Mixins](/lessons/rapid-backend-development/11-class-based-views/) | Replace repetitive views with generic class-based views and add access rules with mixins | Intermediate | 16 min |
+| [12. Custom Management Commands](/lessons/rapid-backend-development/12-management-commands/) | Write your own manage.py commands to set up roles, import CSV data and report on the database | Intermediate | 14 min |
+| [13. Building a REST API with Django REST Framework](/lessons/rapid-backend-development/13-rest-apis-with-drf/) | Expose models as JSON with serializers, viewsets and routers, with pagination and validation | Advanced | 20 min |
+| [14. API Authentication, Permissions and Custom Actions](/lessons/rapid-backend-development/14-api-authentication-and-permissions/) | Add token authentication, custom permissions, owner-only objects, filtering and extra endpoints | Advanced | 19 min |
+| [15. Testing Django Applications](/lessons/rapid-backend-development/15-testing-django-apps/) | Test models, views, forms, permissions, uploads, commands and the API with Django's test tools | Advanced | 18 min |
+| [16. Deploying to the Cloud](/lessons/rapid-backend-development/16-deploying-to-the-cloud/) | Prepare settings for production and deploy with Gunicorn, WhiteNoise and PostgreSQL on Render | Advanced | 18 min |
+
+About 4.4 hours of reading, plus the time you spend practicing.

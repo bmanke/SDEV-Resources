@@ -1,0 +1,68 @@
+---
+title: State Playground
+description: A Svelte 5 task board that shows $state, $derived, $effect and undo/redo, with a live state inspector.
+difficulty: intermediate
+readingTime: 5
+tags: [svelte, runes, demo]
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+import StatePlayground from '../../../components/widgets/StatePlayground.svelte';
+
+This widget is one Svelte island with its own reactive state. The left panel is the UI.
+The right panel shows the raw state, derived values and an event log, and updates on every change.
+
+<StatePlayground client:load />
+
+<Aside type="tip" title="Things to try">
+	Add a few tasks, check some off, then press <kbd>Ctrl</kbd> / <kbd>⌘</kbd> + <kbd>Z</kbd> to undo.
+	Open the **Event log** tab to see which changes came from actions and which came from the `$effect`.
+</Aside>
+
+## What's happening
+
+<Steps>
+
+1. **`$state`** holds the source of truth: `tasks`, `filter`, the form draft and the history stacks.
+   The array is deeply reactive, so `task.done = !task.done` updates the UI on its own.
+
+   ```ts
+   let tasks = $state<Task[]>([...]);
+   let filter = $state<'all' | 'active' | 'done'>('all');
+   ```
+
+2. **`$derived`** computes values that always stay in sync. You never have to update them yourself.
+
+   ```ts
+   const visible = $derived(
+   	filter === 'all' ? tasks : tasks.filter((t) => (filter === 'done' ? t.done : !t.done)),
+   );
+   const stats = $derived.by(() => {
+   	const done = tasks.filter((t) => t.done).length;
+   	return { total: tasks.length, done, percent: Math.round((done / tasks.length) * 100) };
+   });
+   ```
+
+3. **Undo and redo** use `$state.snapshot()` to save a plain, non-reactive copy before each change.
+
+   ```ts
+   function commit(message: string, mutate: () => void) {
+   	past = [...past, $state.snapshot(tasks)];
+   	future = [];
+   	mutate();
+   }
+   ```
+
+4. **`$effect`** runs again whenever `stats.percent` changes and writes to the log.
+   The write is wrapped in `untrack()` so the effect doesn't depend on the log it's writing to. Without it, you'd get an infinite loop.
+
+   ```ts
+   $effect(() => {
+   	const percent = stats.percent; // tracked
+   	untrack(() => record('effect', `progress → ${percent}%`)); // not tracked
+   });
+   ```
+
+</Steps>
+
+Source: `src/components/widgets/StatePlayground.svelte`.

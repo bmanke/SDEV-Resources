@@ -1,0 +1,237 @@
+---
+title: "9. Effects and Fetching Data"
+description: "Use useEffect to synchronise with the outside world: load data with fetch, clean up after yourself, and handle loading and errors."
+difficulty: intermediate
+readingTime: 20
+tags: [react, hooks, useeffect, fetch, async]
+sidebar:
+  order: 9
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Rendering a component must be **pure**: it calculates JSX from props and state and does nothing else. But apps have to do things that are not rendering: load data from a server, set the browser tab title, start a timer, listen for keyboard shortcuts. These are called **side effects**, and they belong in the **`useEffect`** hook.
+
+## The shape of an effect
+
+```jsx
+import { useEffect } from 'react';
+
+useEffect(() => {
+  // 1. Setup: runs after the component appears on screen
+  return () => {
+    // 2. Cleanup (optional): runs before the next run and when the component leaves
+  };
+}, [dependencies]);
+```
+
+React runs the effect **after** it has updated the screen. The **dependency array** controls when it runs again:
+
+| Dependencies | The effect runs |
+| ------------ | --------------- |
+| `[]` | Once, after the first render |
+| `[a, b]` | After the first render, and again whenever `a` or `b` changed |
+| (omitted) | After every render (rarely what you want) |
+
+List every prop, state value or function from the component that the effect reads. If you leave one out, the effect works with stale values. The `react-hooks/exhaustive-deps` lint rule from `eslint-plugin-react-hooks` warns about missing dependencies.
+
+## A simple effect: the page title
+
+The browser tab title lives outside React, so changing it is a side effect. Re-run it whenever the number of favorites changes:
+
+```jsx
+useEffect(() => {
+  document.title = `Filmshelf (${favoriteIds.length} favorites)`;
+}, [favoriteIds.length]);
+```
+
+No cleanup is needed, because setting the title again simply replaces the old one.
+
+## Cleanup: undo what you started
+
+Anything that keeps running, such as timers, subscriptions and event listeners, must be stopped when the component goes away or the effect re-runs. Return a cleanup function.
+
+```jsx
+function Clock() {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(id);   // stop the timer when Clock is removed
+  }, []);
+
+  return <p>{seconds}s on this page</p>;
+}
+```
+
+Without the cleanup, every time `Clock` appeared you would start another interval that never stopped.
+
+<Aside type="note" title="Why effects run twice in development">
+In development, `StrictMode` runs every effect, then its cleanup, then the effect again. It is a deliberate test that your cleanup really undoes your setup. If an effect misbehaves when it runs twice, it is missing cleanup. The double run never happens in production.
+</Aside>
+
+## Loading data
+
+Move the sample data out of JavaScript and into a JSON file that the app fetches, the way it would fetch from a real server. Vite serves everything in `public/` from the site root.
+
+```json title="public/movies.json"
+[
+  { "id": 1, "title": "Neon Harbor", "year": 2021, "genre": "Thriller", "rating": 7.8 },
+  { "id": 2, "title": "The Last Lighthouse", "year": 2019, "genre": "Drama", "rating": 8.4 },
+  { "id": 3, "title": "Paper Moons", "year": 2023, "genre": "Animation", "rating": 8.1 },
+  { "id": 4, "title": "Orbit Kitchen", "year": 2022, "genre": "Comedy", "rating": 6.9 },
+  { "id": 5, "title": "Quiet Engines", "year": 2020, "genre": "Sci-Fi", "rating": 7.2 },
+  { "id": 6, "title": "Maple Street Heist", "year": 2018, "genre": "Thriller", "rating": 6.5 },
+  { "id": 7, "title": "Glass Garden", "year": 2024, "genre": "Drama", "rating": 8.8 },
+  { "id": 8, "title": "Tidewater", "year": 2017, "genre": "Sci-Fi", "rating": 7.5 }
+]
+```
+
+The data file now only needs the genres:
+
+```js title="src/data/movies.js"
+export const genres = ['Animation', 'Comedy', 'Drama', 'Sci-Fi', 'Thriller'];
+```
+
+Data that arrives later needs three pieces of state: the data, whether it is still loading, and whether it failed.
+
+```jsx title="src/App.jsx (changes)"
+import { useEffect, useState } from 'react';
+// ...the other imports stay, but remove: import { movies as initialMovies } from './data/movies.js';
+
+export default function App() {
+  const [movies, setMovies] = useState([]);
+  const [status, setStatus] = useState('loading'); // 'loading' | 'success' | 'error'
+  const [error, setError] = useState(null);
+  const [favoriteIds, setFavoriteIds] = useState([]);
+  const [query, setQuery] = useState('');
+  const [genre, setGenre] = useState('All');
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadMovies() {
+      try {
+        const response = await fetch(`${import.meta.env.BASE_URL}movies.json`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+        setMovies(await response.json());
+        setStatus('success');
+      } catch (err) {
+        if (err.name === 'AbortError') return; // the component went away, ignore
+        setError(err.message);
+        setStatus('error');
+      }
+    }
+
+    loadMovies();
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    document.title = `Filmshelf (${favoriteIds.length} favorites)`;
+  }, [favoriteIds.length]);
+
+  // ...visibleMovies, toggleFavorite, addMovie and clearFilters stay the same
+
+  let content;
+  if (status === 'loading') {
+    content = <p>Loading movies...</p>;
+  } else if (status === 'error') {
+    content = <p role="alert">Could not load movies: {error}</p>;
+  } else {
+    content = (
+      <MovieList
+        movies={visibleMovies}
+        favoriteIds={favoriteIds}
+        onToggleFavorite={toggleFavorite}
+      />
+    );
+  }
+
+  return (
+    <>
+      <Header />
+      <div className="layout">
+        <Sidebar selectedGenre={genre} onSelectGenre={setGenre} />
+        <main>
+          <SearchBar value={query} onChange={setQuery} />
+          <Panel title={genre === 'All' ? 'All movies' : genre}>
+            {/* favorites message and Clear filters button stay here */}
+            {content}
+          </Panel>
+          <AddMovieForm onAdd={addMovie} />
+        </main>
+      </div>
+    </>
+  );
+}
+```
+
+Walk through what happens:
+
+1. First render: `movies` is empty and `status` is `'loading'`, so the user sees "Loading movies...".
+2. After that render, the effect starts the request.
+3. When the response arrives, `setMovies` and `setStatus('success')` trigger a re-render with the real list.
+4. If the request fails, the error message appears instead.
+
+### Details that matter
+
+- **The effect function cannot be `async`.** An `async` function returns a promise, but React expects either nothing or a cleanup function. Define an `async` function inside the effect and call it.
+- **`fetch` does not reject on HTTP errors.** A 404 or 500 still resolves, so check `response.ok` yourself and throw.
+- **`import.meta.env.BASE_URL`** is `/` in development and becomes the site's sub-path when you deploy to a project page on GitHub Pages. It keeps the file URL correct (Lesson 17).
+- **`AbortController` cancels the request** when the component unmounts, and the cleanup calls `abort()`. In the `catch` block, an `AbortError` is not a real failure, so it is ignored.
+- **Race conditions.** If an effect depends on a value (a search term or an id) and the value changes quickly, the responses can arrive out of order. Aborting the previous request in cleanup makes sure only the latest one updates state.
+
+<Aside type="caution" title="Do not set state in an effect that depends on that state">
+`useEffect(() => setCount(count + 1), [count])` loops forever: the effect changes `count`, which re-runs the effect. If you notice you are updating state inside an effect just to calculate something, calculate it during render instead.
+</Aside>
+
+## You might not need an effect
+
+Effects are for synchronising with things outside React. Do not use them for:
+
+- **Derived data.** `visibleMovies` is computed in the render from `movies`, `query` and `genre`. An effect that copies it into more state would add a second render and a chance of inconsistency.
+- **Reacting to a click or a submit.** Put that logic in the event handler, where you know exactly what happened.
+- **Fetching in every component by hand.** This lesson teaches the mechanics, but caching, retries and shared loading states are tedious to write yourself. Lesson 14 replaces this effect with TanStack Query.
+
+## Check yourself
+
+1. Write an effect that logs `'Mounted'` once and `'Unmounted'` when the component is removed.
+2. Add a `useEffect` that listens for the `keydown` event on `document` and logs `event.key`. Make sure the listener is removed.
+3. Why is `useEffect(async () => { ... }, [])` wrong, and what do you write instead?
+4. A component shows a user by `userId`. Which dependency array makes it refetch when the id changes?
+
+<details>
+<summary>Answers</summary>
+
+```jsx
+// 1
+useEffect(() => {
+  console.log('Mounted');
+  return () => console.log('Unmounted');
+}, []);
+
+// 2
+useEffect(() => {
+  function handleKeyDown(event) {
+    console.log(event.key);
+  }
+  document.addEventListener('keydown', handleKeyDown);
+  return () => document.removeEventListener('keydown', handleKeyDown);
+}, []);
+
+// 3
+useEffect(() => {
+  async function load() {
+    // await something
+  }
+  load();
+}, []);
+```
+
+3. An `async` function always returns a promise, and React would treat that as the cleanup function. Declare an inner `async` function and call it.
+4. `[userId]`. The effect re-runs each time `userId` changes, and cleanup should abort the previous request.
+
+</details>

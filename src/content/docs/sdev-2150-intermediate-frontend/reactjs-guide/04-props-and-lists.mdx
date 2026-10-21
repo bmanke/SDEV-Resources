@@ -1,0 +1,203 @@
+---
+title: "4. Props and Lists"
+description: "Pass data into components with props, share layout with children, and render a list of components from an array."
+difficulty: beginner
+readingTime: 16
+tags: [react, props, lists, children]
+sidebar:
+  order: 4
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+So far every `MovieCard` shows the same movie. **Props** (short for properties) are how you give a component different data each time you use it. They are the arguments of a component, passed the way you write HTML attributes.
+
+## Passing props
+
+```jsx
+<MovieCard title="Neon Harbor" year={2021} genre="Thriller" rating={7.8} />
+<MovieCard title="Glass Garden" year={2024} genre="Drama" rating={8.8} />
+```
+
+- Text values can be written as plain strings: `title="Neon Harbor"`.
+- Everything else goes in curly braces: numbers (`year={2021}`), booleans, arrays, objects and functions.
+- A prop written with no value, such as `isFavorite`, means `true`.
+
+The component receives one object containing all of them. Destructure it in the parameter list to get clean variable names.
+
+```jsx title="src/components/MovieCard.jsx"
+export default function MovieCard({ title, year, genre = 'Unknown', rating }) {
+  return (
+    <article className="movie-card">
+      <h3>{title}</h3>
+      <p>
+        {year} · {genre} · Rating {rating}
+      </p>
+    </article>
+  );
+}
+```
+
+`genre = 'Unknown'` is a **default value**. It applies when the parent does not pass that prop (or passes `undefined`).
+
+## Props flow one way and are read-only
+
+Data moves **down** the tree, from a parent to its children. A child cannot pass props up to its parent, and it cannot change the props it received. In development, React freezes the props object, so this fails:
+
+```jsx
+function Bad(props) {
+  props.title = 'changed';   // TypeError: Cannot assign to read only property 'title'
+  return <p>{props.title}</p>;
+}
+```
+
+If a component needs data that changes, it keeps that data in **state** (Lesson 5). If a child needs to tell its parent something happened, the parent passes down a **function** as a prop and the child calls it. You will use that pattern in Lessons 5 and 6.
+
+## The data
+
+Put the sample movies in a data file so you can reuse them.
+
+```js title="src/data/movies.js"
+export const movies = [
+  { id: 1, title: 'Neon Harbor', year: 2021, genre: 'Thriller', rating: 7.8 },
+  { id: 2, title: 'The Last Lighthouse', year: 2019, genre: 'Drama', rating: 8.4 },
+  { id: 3, title: 'Paper Moons', year: 2023, genre: 'Animation', rating: 8.1 },
+  { id: 4, title: 'Orbit Kitchen', year: 2022, genre: 'Comedy', rating: 6.9 },
+  { id: 5, title: 'Quiet Engines', year: 2020, genre: 'Sci-Fi', rating: 7.2 },
+  { id: 6, title: 'Maple Street Heist', year: 2018, genre: 'Thriller', rating: 6.5 },
+  { id: 7, title: 'Glass Garden', year: 2024, genre: 'Drama', rating: 8.8 },
+  { id: 8, title: 'Tidewater', year: 2017, genre: 'Sci-Fi', rating: 7.5 },
+];
+```
+
+These movies and their ratings are made up for practice.
+
+## Rendering a list
+
+To show one card per movie, **map** the array to an array of JSX. React can render arrays.
+
+```jsx title="src/components/MovieList.jsx"
+import MovieCard from './MovieCard.jsx';
+
+export default function MovieList({ movies }) {
+  return (
+    <ul className="movie-list">
+      {movies.map((movie) => (
+        <li key={movie.id}>
+          <MovieCard {...movie} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+Three things are happening here:
+
+1. `movies.map(...)` turns each movie object into a `<li>` element.
+2. `key={movie.id}` gives each item a stable identity. React uses keys to match items between renders, so it can update, add, or remove the right one. Keys must be unique among siblings and must not change. Use a database id, never a random number created during render. Lesson 8 covers the pitfalls.
+3. `<MovieCard {...movie} />` is the **spread** syntax. It passes every property of `movie` as a prop, so it is a shortcut for `title={movie.title} year={movie.year} ...`. It also passes `id`, which `MovieCard` ignores for now.
+
+<Aside type="caution" title="The key is not a prop">
+React uses `key` itself and does not pass it to your component. If `MovieCard` needs the id, pass it separately (spreading the movie does that, because `id` is an ordinary property, not the `key`).
+</Aside>
+
+## Children: components that wrap other content
+
+The special prop **`children`** holds whatever you place between a component's opening and closing tags. It lets you build wrappers such as panels, cards and layouts.
+
+```jsx title="src/components/Panel.jsx"
+export default function Panel({ title, children }) {
+  return (
+    <section className="panel">
+      <h2>{title}</h2>
+      {children}
+    </section>
+  );
+}
+```
+
+```jsx title="src/App.jsx"
+import Header from './components/Header.jsx';
+import Sidebar from './components/Sidebar.jsx';
+import SearchBar from './components/SearchBar.jsx';
+import Panel from './components/Panel.jsx';
+import MovieList from './components/MovieList.jsx';
+import { movies } from './data/movies.js';
+
+export default function App() {
+  return (
+    <>
+      <Header />
+      <div className="layout">
+        <Sidebar />
+        <main>
+          <SearchBar />
+          <Panel title="All movies">
+            <MovieList movies={movies} />
+          </Panel>
+        </main>
+      </div>
+    </>
+  );
+}
+```
+
+`Panel` does not know or care what it wraps. That makes it reusable for a favorites list, a form, or anything else.
+
+## Passing functions as props
+
+Props can be functions. This is how a child talks to its parent: the parent defines what should happen, and the child decides when.
+
+```jsx
+function Parent() {
+  function handleSelect(title) {
+    console.log('Selected', title);
+  }
+  return <MovieRow title="Tidewater" onSelect={handleSelect} />;
+}
+
+function MovieRow({ title, onSelect }) {
+  return <button onClick={() => onSelect(title)}>{title}</button>;
+}
+```
+
+By convention, props that receive handlers start with `on` (`onSelect`, `onAdd`) and the functions that implement them start with `handle`.
+
+## Check yourself
+
+1. Create a `Badge` component that takes a `label` prop and a `tone` prop (default `'neutral'`) and renders `<span className="badge neutral">label</span>`, with the tone in the class.
+2. Render three `Badge` components from the array `['New', 'Popular', 'Staff pick']` with `map`.
+3. Why is `key={Math.random()}` a bad idea?
+4. A `Card` component should accept any content. Write it so `<Card>Hello</Card>` renders `<div className="card">Hello</div>`.
+
+<details>
+<summary>Answers</summary>
+
+```jsx
+// 1
+function Badge({ label, tone = 'neutral' }) {
+  return <span className={`badge ${tone}`}>{label}</span>;
+}
+
+// 2
+function BadgeRow() {
+  const labels = ['New', 'Popular', 'Staff pick'];
+  return (
+    <p>
+      {labels.map((label) => (
+        <Badge key={label} label={label} />
+      ))}
+    </p>
+  );
+}
+
+// 4
+function Card({ children }) {
+  return <div className="card">{children}</div>;
+}
+```
+
+3. A new random key on every render makes React think every item is brand new. It throws away and rebuilds all of them, losing state such as what the user typed into a field. Use a stable id from the data (here the label itself is unique, so it works as a key).
+
+</details>

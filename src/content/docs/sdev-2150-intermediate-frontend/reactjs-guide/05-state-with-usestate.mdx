@@ -1,0 +1,289 @@
+---
+title: "5. State with useState"
+description: "Give a component a memory with useState, update it safely, and lift state up so components can share it."
+difficulty: beginner
+readingTime: 18
+tags: [react, state, hooks, usestate]
+sidebar:
+  order: 5
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Props are data a component is given. **State** is data a component remembers. It holds information that changes over time, such as the text in a search box, whether a menu is open, or which movies you have marked as favorites. When state changes, React **re-renders** the component, which means it runs the component function again and updates the page to match.
+
+## Why a normal variable is not enough
+
+```jsx
+function BrokenCounter() {
+  let count = 0;
+
+  return (
+    <button type="button" onClick={() => { count = count + 1; console.log(count); }}>
+      Clicked {count} times
+    </button>
+  );
+}
+```
+
+The console shows 1, 2, 3, but the button always says 0. There are two reasons:
+
+1. Changing a local variable does not tell React anything happened, so React does not re-render.
+2. Even if it did re-render, the function would run again from the top and `count` would reset to 0.
+
+State fixes both problems: React stores the value outside the function between renders, and the setter function tells React to re-render.
+
+## The `useState` hook
+
+```jsx
+import { useState } from 'react';
+
+export default function Counter() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <button type="button" onClick={() => setCount(count + 1)}>
+      Clicked {count} times
+    </button>
+  );
+}
+```
+
+`useState(0)` returns an array of two items, which you destructure:
+
+- `count` is the current value. On the first render it is the initial value you passed, `0`.
+- `setCount` is the function that replaces the value and asks React to re-render.
+
+`useState` is a **hook**, a special function whose name starts with `use`. Hooks follow two rules:
+
+1. Call them only at the **top level** of a component or another hook, never inside conditions, loops or nested functions.
+2. Call them only from **components and custom hooks**, not from regular functions.
+
+React tracks hooks by the order they are called in, so that order must be the same on every render.
+
+## State is a snapshot
+
+Inside one render, `count` is a fixed value. Calling `setCount` does not change the variable in the code that is already running. It schedules the next render.
+
+```jsx
+function Triple() {
+  const [count, setCount] = useState(0);
+
+  function addThree() {
+    setCount(count + 1);   // count is 0 here, so this asks for 1
+    setCount(count + 1);   // still 0, so this asks for 1 again
+    setCount(count + 1);   // and again
+  }                        // result after one click: 1, not 3
+
+  return <button type="button" onClick={addThree}>Count {count}</button>;
+}
+```
+
+When the next value depends on the previous one, pass an **updater function**. React queues the functions and runs them in order, each receiving the latest value.
+
+```jsx
+function addThree() {
+  setCount((current) => current + 1);
+  setCount((current) => current + 1);
+  setCount((current) => current + 1);   // result after one click: 3
+}
+```
+
+Use the updater form whenever the new state is calculated from the old state. It is also required for the array and object patterns below.
+
+## Never change state in place
+
+Arrays and objects in state must be treated as **read-only**. If you modify them directly, React cannot tell that anything changed. Create a **new** array or object instead.
+
+| Goal | Do not use | Use |
+| ---- | ---------- | --- |
+| Add to an array | `push`, `unshift` | `[...items, newItem]` |
+| Remove from an array | `splice`, `pop` | `items.filter((item) => item.id !== id)` |
+| Change an item | `items[0].done = true` | `items.map((item) => item.id === id ? { ...item, done: true } : item)` |
+| Change an object field | `user.name = 'Sam'` | `{ ...user, name: 'Sam' }` |
+| Sort an array | `items.sort()` | `[...items].sort()` or `items.toSorted()` |
+
+```jsx
+const [todos, setTodos] = useState([{ id: 1, text: 'Write lesson', done: false }]);
+
+function toggle(id) {
+  setTodos((current) =>
+    current.map((todo) => (todo.id === id ? { ...todo, done: !todo.done } : todo)),
+  );
+}
+
+function remove(id) {
+  setTodos((current) => current.filter((todo) => todo.id !== id));
+}
+```
+
+## State that belongs to one component
+
+A favorite button can keep its own state inside `MovieCard`:
+
+```jsx title="src/components/MovieCard.jsx (first attempt)"
+import { useState } from 'react';
+
+export default function MovieCard({ title, year, genre = 'Unknown', rating }) {
+  const [isFavorite, setIsFavorite] = useState(false);
+
+  return (
+    <article className="movie-card">
+      <h3>{title}</h3>
+      <p>
+        {year} · {genre} · Rating {rating}
+      </p>
+      <button type="button" onClick={() => setIsFavorite(!isFavorite)}>
+        {isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+      </button>
+    </article>
+  );
+}
+```
+
+Each card has its own independent `isFavorite`, because state belongs to a specific component instance. State is **private**: nothing outside the card can read it or change it.
+
+That is a problem as soon as another part of the page needs the information. Suppose you want to show "Favorites: 3" above the list. The list and the cards are siblings or children, and none of them can reach into another card's state.
+
+## Lifting state up
+
+The fix is to move the state to the **closest common parent** and pass it down as props. The parent owns the data, and children receive the values and functions they need.
+
+```jsx title="src/App.jsx"
+import { useState } from 'react';
+import Header from './components/Header.jsx';
+import Sidebar from './components/Sidebar.jsx';
+import SearchBar from './components/SearchBar.jsx';
+import Panel from './components/Panel.jsx';
+import MovieList from './components/MovieList.jsx';
+import { movies } from './data/movies.js';
+
+export default function App() {
+  const [favoriteIds, setFavoriteIds] = useState([]);
+
+  function toggleFavorite(id) {
+    setFavoriteIds((ids) =>
+      ids.includes(id) ? ids.filter((existing) => existing !== id) : [...ids, id],
+    );
+  }
+
+  return (
+    <>
+      <Header />
+      <div className="layout">
+        <Sidebar />
+        <main>
+          <SearchBar />
+          <Panel title="All movies">
+            <p>Favorites: {favoriteIds.length}</p>
+            <MovieList
+              movies={movies}
+              favoriteIds={favoriteIds}
+              onToggleFavorite={toggleFavorite}
+            />
+          </Panel>
+        </main>
+      </div>
+    </>
+  );
+}
+```
+
+```jsx title="src/components/MovieList.jsx"
+import MovieCard from './MovieCard.jsx';
+
+export default function MovieList({ movies, favoriteIds, onToggleFavorite }) {
+  return (
+    <ul className="movie-list">
+      {movies.map((movie) => (
+        <li key={movie.id}>
+          <MovieCard
+            {...movie}
+            isFavorite={favoriteIds.includes(movie.id)}
+            onToggleFavorite={onToggleFavorite}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+```jsx title="src/components/MovieCard.jsx"
+export default function MovieCard({
+  id,
+  title,
+  year,
+  genre = 'Unknown',
+  rating,
+  isFavorite,
+  onToggleFavorite,
+}) {
+  return (
+    <article className="movie-card">
+      <h3>{title}</h3>
+      <p>
+        {year} · {genre} · Rating {rating}
+      </p>
+      <button type="button" aria-pressed={isFavorite} onClick={() => onToggleFavorite(id)}>
+        {isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+      </button>
+    </article>
+  );
+}
+```
+
+The data now flows in a loop that is easy to follow:
+
+1. `App` owns `favoriteIds`.
+2. It passes `isFavorite` (a value) and `onToggleFavorite` (a function) down.
+3. A click calls `onToggleFavorite(id)`, which updates state in `App`.
+4. `App` re-renders, and the new props flow back down to every card.
+
+`MovieCard` became simpler. It has no state and just displays what it is told, which also makes it easy to test.
+
+<Aside type="tip" title="Do not store what you can calculate">
+The favorite count is `favoriteIds.length`. Do not create a second state variable for it. Two copies of the same information drift apart, so keep one source of truth and derive the rest during rendering.
+</Aside>
+
+## When does React re-render?
+
+A component re-renders when its own state changes or when its parent re-renders. Re-rendering is normally cheap, since React compares the result with the previous one and only touches the DOM where something differs. Lesson 12 shows what to do in the rare cases where it is not cheap.
+
+## Check yourself
+
+1. Create a `LikeButton` component with a `likes` state that starts at 0 and increases by 1 on each click.
+2. Add a "Reset" button that sets it back to 0.
+3. `const [names, setNames] = useState(['Ada'])`. Write the code to add `'Grace'` and the code to remove `'Ada'`, without changing the array in place.
+4. Two sibling components both need to show the same selected movie. Where should the state live?
+
+<details>
+<summary>Answers</summary>
+
+```jsx
+// 1 and 2
+import { useState } from 'react';
+
+export default function LikeButton() {
+  const [likes, setLikes] = useState(0);
+
+  return (
+    <>
+      <button type="button" onClick={() => setLikes((current) => current + 1)}>
+        Likes: {likes}
+      </button>
+      <button type="button" onClick={() => setLikes(0)}>
+        Reset
+      </button>
+    </>
+  );
+}
+
+// 3
+setNames((current) => [...current, 'Grace']);
+setNames((current) => current.filter((name) => name !== 'Ada'));
+```
+
+4. In their closest common parent. The parent holds the selected movie in state and passes it to both siblings as a prop, along with a function to change it if either sibling needs to.
+
+</details>

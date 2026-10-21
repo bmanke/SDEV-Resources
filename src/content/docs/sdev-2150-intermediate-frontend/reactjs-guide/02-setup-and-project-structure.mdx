@@ -1,0 +1,210 @@
+---
+title: "2. Setup and Project Structure"
+description: "Install Node.js and Git, create a React project with Vite, and learn what every starter file does."
+difficulty: beginner
+readingTime: 13
+tags: [react, vite, node, git, project-structure]
+sidebar:
+  order: 2
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Before you write any React you need a place to write it and a tool that runs it. React code uses JSX, which browsers cannot read, so a build tool turns your files into plain JavaScript. **Vite** does that job and gives you a fast development server.
+
+## What to install
+
+<Steps>
+
+1. **Node.js (LTS).** Node runs JavaScript outside the browser, and the tools in this lesson run on it. Download the LTS version from [nodejs.org](https://nodejs.org). It includes **npm**, the package manager that installs libraries.
+
+   ```sh
+   node -v     # v24.x or newer is fine
+   npm -v
+   ```
+
+2. **Git.** Version control is essential for every developer. Install it from [git-scm.com](https://git-scm.com), then tell it who you are:
+
+   ```sh
+   git config --global user.name "Your Name"
+   git config --global user.email "you@example.com"
+   ```
+
+3. **A code editor.** Any editor with JavaScript support works. Visual Studio Code is free and popular, and WebStorm is a full IDE with built-in error reporting and Git tools. Both understand JSX.
+
+</Steps>
+
+<Aside type="note" title="Node versions">
+Vite 8 needs Node 20.19 or newer, or 22.12 or newer. React Router 8, which you will use in Lesson 13, needs Node 22.22 or newer. The current LTS release satisfies both. See [Tooling: Git, Node and Vite](/lessons/frontend-development/01-tooling-git-node-and-vite/) for more on the daily workflow.
+</Aside>
+
+## Create the project
+
+```sh
+npm create vite@latest filmshelf -- --template react
+cd filmshelf
+npm install
+npm run dev
+```
+
+The first command scaffolds a project named `filmshelf` from the React (JavaScript) template. `npm install` downloads the dependencies listed in `package.json`, and `npm run dev` starts the development server, normally at `http://localhost:5173`. Edit a file and the browser updates instantly. This is called **hot module replacement** (HMR).
+
+<Aside type="tip">
+If a prompt asks you to choose options such as a framework or variant, pick **React** and **JavaScript**. Templates change over time, so your files may differ slightly from the list below. The ideas stay the same.
+</Aside>
+
+## What you get
+
+```text
+filmshelf/
+├── index.html
+├── package.json
+├── vite.config.js
+├── .oxlintrc.json
+├── .gitignore
+├── public/
+│   ├── favicon.svg
+│   └── icons.svg
+└── src/
+    ├── main.jsx
+    ├── App.jsx
+    ├── App.css
+    ├── index.css
+    └── assets/
+```
+
+| File or folder | What it does |
+| -------------- | ------------ |
+| `index.html` | The only HTML page. It has an empty `<div id="root">` and a script tag that loads `src/main.jsx`. |
+| `src/main.jsx` | The entry point. It tells React to draw your app inside the `root` element. |
+| `src/App.jsx` | The top-level component. Everything else hangs off this one. |
+| `src/index.css`, `src/App.css` | Global and App styles. |
+| `src/assets/` | Images and files that your code imports. Vite fingerprints them for caching. |
+| `public/` | Files copied to the site root as they are, such as the favicon. Refer to them with an absolute path like `/favicon.svg`. |
+| `vite.config.js` | Vite settings, including the React plugin. |
+| `package.json` | Project name, dependencies and scripts. |
+| `.oxlintrc.json` | Settings for the linter that the template includes. |
+
+### The entry point
+
+```jsx title="src/main.jsx"
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import './index.css';
+import App from './App.jsx';
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+);
+```
+
+- `createRoot` connects React to the real DOM element with the id `root`.
+- `render` draws the `App` component inside it.
+- `StrictMode` is a development helper. It renders components twice and re-runs effects once, which exposes bugs such as code that changes data it should not. It has no effect in the production build.
+
+Notice that imports of your own files include the extension (`./App.jsx`). Files that contain JSX should use `.jsx`.
+
+### The scripts
+
+```json title="package.json (excerpt)"
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  }
+}
+```
+
+| Command | Use |
+| ------- | --- |
+| `npm run dev` | Start the development server with HMR |
+| `npm run build` | Create an optimised production build in `dist/` |
+| `npm run preview` | Serve the `dist/` folder locally to check the production build |
+| `npm run lint` | Check the code for common mistakes |
+
+## Clean up the starter
+
+The starter page is a demo. Replace it with the smallest possible app so you start from a clean slate.
+
+<Steps>
+
+1. Delete `src/App.css`, the `src/assets` folder and `public/icons.svg`.
+2. Empty `src/index.css`. You will fill it in Lesson 7.
+3. Replace the contents of `src/App.jsx`:
+
+   ```jsx title="src/App.jsx"
+   export default function App() {
+     return <h1>Hello, Filmshelf</h1>;
+   }
+   ```
+
+4. Change the page title in `index.html` to `Filmshelf`.
+
+</Steps>
+
+Save, and the browser should show the heading. The page already has everything React needs: one component, rendered into one element.
+
+## Folder structure
+
+There is no single required structure, but a clear one saves time as the app grows. This course uses folders by type. They appear as you need them:
+
+```text
+src/
+├── api/          functions that talk to servers          (Lesson 14)
+├── components/   reusable pieces of UI                   (Lesson 3 onwards)
+├── context/      shared state through context            (Lesson 10)
+├── data/         constants and static data               (Lesson 3)
+├── hooks/        your own hooks                          (Lesson 11)
+├── pages/        one component per route                 (Lesson 13)
+├── state/        a hand-written reducer                  (Lesson 11, replaced in Lesson 14)
+├── store/        Redux state                             (Lesson 15)
+├── test/         test setup and helpers                  (Lesson 16)
+├── App.jsx
+└── main.jsx
+```
+
+Larger projects often group by feature instead (everything about movies in one folder). Both work. What matters is that the team follows one convention.
+
+<Aside type="caution" title="Naming conventions">
+Component files and the components inside them start with a capital letter (`MovieCard.jsx`). Hooks start with `use` (`useMovies.js`). React treats a lowercase tag such as `<movieCard />` as a built-in HTML element, so a lowercase component name will not work.
+</Aside>
+
+## Put it under version control
+
+```sh
+git init
+git add .
+git commit -m "Create Filmshelf with Vite and React"
+```
+
+The template's `.gitignore` already excludes `node_modules` and `dist`. Commit again at the end of every lesson so you can always go back.
+
+## Build and preview
+
+```sh
+npm run build
+npm run preview
+```
+
+`build` writes the finished site to `dist/`. `preview` serves that folder, so you see what visitors will get. Lesson 17 covers putting `dist/` on the internet.
+
+## Check yourself
+
+1. Which file connects React to the page, and which element does it use?
+2. What is the difference between the `src/assets` folder and the `public` folder?
+3. Why does `src/main.jsx` render `App` inside `StrictMode`?
+4. Create a project called `practice`, change the heading, and run `npm run build`. What new folder appears?
+
+<details>
+<summary>Answers</summary>
+
+1. `src/main.jsx` does it, using `createRoot` on the element with the id `root` in `index.html`.
+2. Files in `src/assets` are imported by your code, and Vite processes and fingerprints them. Files in `public` are copied unchanged to the root of the site and are referenced by absolute path.
+3. `StrictMode` runs extra development-only checks (double rendering, extra effect runs) that reveal impure components and missing cleanup. It does nothing in production.
+4. A `dist` folder, containing `index.html` and an `assets` folder with the bundled JavaScript and CSS.
+
+</details>

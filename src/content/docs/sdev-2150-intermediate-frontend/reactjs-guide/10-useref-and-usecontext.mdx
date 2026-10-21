@@ -1,0 +1,275 @@
+---
+title: "10. useRef and useContext"
+description: "Reach DOM elements and keep values between renders with useRef, and share data across the tree without prop drilling using context."
+difficulty: intermediate
+readingTime: 18
+tags: [react, hooks, useref, usecontext, context]
+sidebar:
+  order: 10
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+This lesson covers two hooks that solve very different problems. `useRef` lets a component hold on to something without re-rendering. `useContext` lets distant components share a value without passing it through every layer in between.
+
+## useRef: a box that survives renders
+
+`useRef(initialValue)` returns an object shaped like `{ current: initialValue }`. React gives you the **same object on every render**, and changing `ref.current` does **not** trigger a re-render.
+
+| | `useState` | `useRef` |
+| --- | --- | --- |
+| Survives re-renders | Yes | Yes |
+| Changing it re-renders the component | Yes | No |
+| Use it for | Anything shown on screen | DOM elements, timer ids, values the screen does not depend on |
+
+There are two main uses.
+
+### 1. Reaching a DOM element
+
+Attach the ref to an element with the `ref` attribute. After React draws the element, `ref.current` points at it. This lets you call browser methods that React does not expose, such as `focus()`, `scrollIntoView()` or `play()`.
+
+Here is the search box from Lesson 6 with two improvements: a **Clear** button that empties the field and puts the cursor back in it, and a **/** keyboard shortcut that jumps to the field from anywhere on the page.
+
+```jsx title="src/components/SearchBar.jsx"
+import { useEffect, useRef } from 'react';
+
+export default function SearchBar({ value, onChange }) {
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === '/' && document.activeElement !== inputRef.current) {
+        event.preventDefault();   // keep the slash out of the field
+        inputRef.current.focus();
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  function clear() {
+    onChange('');
+    inputRef.current.focus();
+  }
+
+  return (
+    <div className="search-bar">
+      <label htmlFor="search">Search movies</label>
+      <input
+        ref={inputRef}
+        id="search"
+        type="search"
+        placeholder="Type a title (press / to focus)"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') onChange('');
+        }}
+      />
+      <button type="button" onClick={clear}>
+        Clear
+      </button>
+    </div>
+  );
+}
+```
+
+Notes:
+
+- `useRef(null)` starts empty. React fills in `inputRef.current` once the input exists, so only use it inside effects and event handlers, never while rendering.
+- The effect with `[]` registers the keyboard listener once, and the cleanup removes it. This is the pattern from Lesson 9.
+- The effect reads `inputRef.current` when a key is pressed, not when the effect runs, so the element is always ready.
+
+<Aside type="tip" title="ref is a normal prop in React 19">
+In React 19, a function component can receive `ref` like any other prop: `function Field({ label, ref }) { ... <input ref={ref} /> }`. Older code wraps such components in `forwardRef`, which you will still see in existing projects.
+</Aside>
+
+### 2. Remembering a value without re-rendering
+
+A ref is also a mutable container for values that matter to your code but not to the screen, such as a timer id or the previous value of a prop.
+
+```jsx
+function StopWatch() {
+  const [seconds, setSeconds] = useState(0);
+  const intervalRef = useRef(null);
+
+  function start() {
+    if (intervalRef.current !== null) return;   // already running
+    intervalRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+  }
+
+  function stop() {
+    clearInterval(intervalRef.current);
+    intervalRef.current = null;
+  }
+
+  useEffect(() => stop, []);   // stop the timer if the component is removed
+
+  return (
+    <>
+      <p>{seconds}s</p>
+      <button type="button" onClick={start}>Start</button>
+      <button type="button" onClick={stop}>Stop</button>
+    </>
+  );
+}
+```
+
+The timer id is not displayed, so a ref is the right place for it. Storing it in state would cause a pointless re-render each time it changed.
+
+<Aside type="caution">
+Do not read or write `ref.current` during rendering (apart from setting it up the first time). Doing so makes the component impure, and React's development checks will not be able to protect you. Use refs in event handlers and effects.
+</Aside>
+
+## useContext: sharing data without prop drilling
+
+Props are explicit, but passing a value through five layers of components that do not use it (**prop drilling**) is tedious and noisy. For information that many components need, such as the current theme, the signed-in user or the language, use **context**.
+
+Using context has three steps: create it, provide a value, and read it.
+
+### Create the context and a hook to read it
+
+```js title="src/context/ThemeContext.js"
+import { createContext, useContext } from 'react';
+
+export const ThemeContext = createContext(null);
+
+export function useTheme() {
+  const context = useContext(ThemeContext);
+  if (context === null) {
+    throw new Error('useTheme must be used inside a ThemeProvider');
+  }
+  return context;
+}
+```
+
+`useTheme` is a small **custom hook** that wraps `useContext`. Consumers call `useTheme()` instead of knowing about the context object, and a missing provider produces a clear error message instead of a confusing crash.
+
+### Provide the value
+
+```jsx title="src/context/ThemeProvider.jsx"
+import { useEffect, useState } from 'react';
+import { ThemeContext } from './ThemeContext.js';
+
+export default function ThemeProvider({ children }) {
+  const [theme, setTheme] = useState('light');
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme((current) => (current === 'light' ? 'dark' : 'light'));
+  }
+
+  return <ThemeContext value={{ theme, toggleTheme }}>{children}</ThemeContext>;
+}
+```
+
+`ThemeProvider` owns the state. The value it shares is an object holding the current theme and the function that changes it. In React 19 you render the context itself as the provider (`<ThemeContext value={...}>`). In older code you will see `<ThemeContext.Provider value={...}>`, which works the same way.
+
+Wrap the app in it. Every component below the provider can now read the theme.
+
+```jsx title="src/main.jsx"
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import './index.css';
+import App from './App.jsx';
+import ThemeProvider from './context/ThemeProvider.jsx';
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
+  </StrictMode>,
+);
+```
+
+### Read the value
+
+The header reads the theme directly. No props were passed through `App` to get it there.
+
+```jsx title="src/components/Header.jsx"
+import { useTheme } from '../context/ThemeContext.js';
+
+export default function Header() {
+  const { theme, toggleTheme } = useTheme();
+
+  return (
+    <header className="header">
+      <h1>Filmshelf</h1>
+      <p>Your personal movie tracker</p>
+      <button type="button" onClick={toggleTheme}>
+        {theme === 'light' ? 'Dark mode' : 'Light mode'}
+      </button>
+    </header>
+  );
+}
+```
+
+### Style the dark theme
+
+The effect in the provider sets `data-theme` on the `html` element. Because Lesson 7 stored the colours in CSS variables, the dark theme only has to override them:
+
+```css title="src/index.css (add below :root)"
+[data-theme='dark'] {
+  --bg: #171716;
+  --surface: #232321;
+  --text: #e8e8e4;
+  --muted: #a3a39c;
+  --accent: #4f98a3;
+  --border: #3a3a37;
+}
+```
+
+Click the button and the whole page switches. The CSS Module styles in `MovieCard.module.css` change too, since they use the same variables.
+
+<Aside type="note" title="use() reads context too">
+React 19 adds a function called `use`. `use(ThemeContext)` reads a context like `useContext` does, with the extra ability to be called inside conditions and loops. `useContext` is the version on the roadmap and the one you will see most often, and both work.
+</Aside>
+
+### When context is the right tool
+
+- **Good fit:** values that rarely change and are needed in many places, such as theme, language, authenticated user.
+- **Every component that reads a context re-renders when its value changes.** If you put fast-changing data in a context, many components re-render needlessly.
+- **Context is not a complete state manager.** For complex shared state with many actions, use `useReducer` with context (Lesson 11) or a library such as Redux Toolkit (Lesson 15).
+- **Keep contexts small and focused.** One for the theme and another for the user is better than one giant context for everything.
+
+## Check yourself
+
+1. Add a button to `AddMovieForm` labelled "Focus title" that moves the cursor into the title input using a ref.
+2. Why is storing a timer id in a ref better than in state?
+3. Create a `UserContext` that holds `{ name: 'Ada' }`, a `UserProvider`, and a `Welcome` component that displays `Hello, Ada`.
+4. What happens if a component calls `useTheme()` but is not inside a `ThemeProvider`?
+
+<details>
+<summary>Answers</summary>
+
+```jsx
+// 1: inside AddMovieForm
+const titleRef = useRef(null);
+// ...
+<input id="title" ref={titleRef} name="title" value={form.title} onChange={handleChange} />
+<button type="button" onClick={() => titleRef.current.focus()}>Focus title</button>
+
+// 3
+import { createContext, useContext } from 'react';
+
+const UserContext = createContext(null);
+
+export function UserProvider({ children }) {
+  return <UserContext value={{ name: 'Ada' }}>{children}</UserContext>;
+}
+
+export function Welcome() {
+  const user = useContext(UserContext);
+  return <p>Hello, {user.name}</p>;
+}
+```
+
+2. Changing a ref does not cause a re-render, and a timer id is not displayed. Putting it in state would trigger an extra render for no visible change.
+4. `useContext` returns the default value, which is `null`, so `useTheme` throws the error `useTheme must be used inside a ThemeProvider`.
+
+</details>

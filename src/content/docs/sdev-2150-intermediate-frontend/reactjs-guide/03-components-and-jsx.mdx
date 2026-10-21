@@ -1,0 +1,252 @@
+---
+title: "3. Components and JSX"
+description: "Split a page into components, write them as functions that return JSX, and learn where JSX differs from HTML."
+difficulty: beginner
+readingTime: 16
+tags: [react, components, jsx]
+sidebar:
+  order: 3
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+React is **component-based**. A component is a small, self-contained piece of the user interface, and every React app is a tree of components. You split the screen into independent parts, build each one once, and combine them.
+
+## Thinking in components
+
+Look at the app you will build, Filmshelf, and ask where the natural boundaries are:
+
+```text
+App
+├── Header
+├── Sidebar                 the list of genres
+└── main
+    ├── SearchBar
+    └── MovieList
+        └── MovieCard       one per movie, with a title and a rating
+```
+
+Each box becomes one component. A good component does one job and has a clear name. If you are unsure where to split, ask whether a part could appear more than once (a `MovieCard`) or whether it can be described in a single sentence (a `SearchBar`).
+
+## A function that returns JSX
+
+A component is a JavaScript function whose name starts with a capital letter and that returns what should appear on screen.
+
+```jsx title="src/components/Header.jsx"
+export default function Header() {
+  return (
+    <header className="header">
+      <h1>Filmshelf</h1>
+      <p>Your personal movie tracker</p>
+    </header>
+  );
+}
+```
+
+The tag-like syntax inside `return` is **JSX**. It is neither a string nor HTML. It is a syntax extension for JavaScript, and the build tool converts it to ordinary function calls.
+
+<Aside type="note" title="Class components">
+Older React code uses classes (`class Header extends React.Component`). Function components replaced them because they are shorter and work with hooks, so new code does not use classes. A few features, such as error boundaries, still need a class, but you can skip classes for now.
+</Aside>
+
+Create a few more components. For now they show fixed content. Lesson 4 makes them flexible.
+
+```jsx title="src/components/SearchBar.jsx"
+export default function SearchBar() {
+  return (
+    <div className="search-bar">
+      <label htmlFor="search">Search movies</label>
+      <input id="search" type="search" placeholder="Type a title" />
+    </div>
+  );
+}
+```
+
+```jsx title="src/components/Sidebar.jsx"
+export default function Sidebar() {
+  return (
+    <aside className="sidebar">
+      <h2>Genres</h2>
+      <ul>
+        <li>Drama</li>
+        <li>Comedy</li>
+        <li>Sci-Fi</li>
+      </ul>
+    </aside>
+  );
+}
+```
+
+```jsx title="src/components/MovieCard.jsx"
+export default function MovieCard() {
+  const year = 2021;
+
+  return (
+    <article className="movie-card">
+      <h3>Neon Harbor</h3>
+      <p>
+        {year} · Thriller · Rating {7.8}
+      </p>
+    </article>
+  );
+}
+```
+
+## Using components
+
+Once a component exists, you use it like an HTML tag. Components can contain other components, which is how the tree is built.
+
+```jsx title="src/App.jsx"
+import Header from './components/Header.jsx';
+import Sidebar from './components/Sidebar.jsx';
+import SearchBar from './components/SearchBar.jsx';
+import MovieCard from './components/MovieCard.jsx';
+
+export default function App() {
+  return (
+    <>
+      <Header />
+      <div className="layout">
+        <Sidebar />
+        <main>
+          <SearchBar />
+          <MovieCard />
+          <MovieCard />
+        </main>
+      </div>
+    </>
+  );
+}
+```
+
+Each `<MovieCard />` is a separate copy. Change `MovieCard` once and every copy changes.
+
+## JSX is not HTML
+
+JSX looks like HTML, and most of what you know carries over. These differences cause most beginner errors.
+
+### 1. `className` instead of `class`, `htmlFor` instead of `for`
+
+`class` and `for` are reserved words in JavaScript, and JSX is JavaScript. So you write:
+
+```jsx
+<h2 className="title">Title</h2>
+<label htmlFor="name">Name</label>
+```
+
+### 2. Attributes are camelCase
+
+Multi-word attribute and event names use camelCase: `tabIndex`, `onClick`, `maxLength`, `autoFocus`. The exceptions are `data-*` and `aria-*` attributes, which keep their hyphens (`aria-label`, `data-id`).
+
+### 3. Every tag must be closed
+
+HTML allows `<input>` and `<img>` with no closing tag. JSX requires `<input />` and `<img />`.
+
+### 4. Return one parent element
+
+A component can return only one root element. To avoid adding an extra `<div>` just to satisfy this rule, wrap siblings in a **fragment**, written `<>...</>`.
+
+```jsx
+function Broken() {
+  return (
+    <h2>Title</h2>
+    <p>Text</p>        // error: adjacent JSX elements must be wrapped
+  );
+}
+
+function Fixed() {
+  return (
+    <>
+      <h2>Title</h2>
+      <p>Text</p>
+    </>
+  );
+}
+```
+
+A `<div>` also works. Fragments simply keep the page's HTML cleaner.
+
+### 5. JavaScript goes in curly braces
+
+Put any JavaScript **expression** between `{` and `}`. This is what makes JSX powerful, since the markup and the logic live together.
+
+```jsx
+const movie = { title: 'Glass Garden', year: 2024, rating: 8.8 };
+const ratingStyle = { color: 'green', fontWeight: 'bold' };
+
+return (
+  <article>
+    <h3>{movie.title.toUpperCase()}</h3>
+    <p>
+      Released {movie.year}, which was {new Date().getFullYear() - movie.year} years ago
+    </p>
+    <p style={ratingStyle}>Rating {movie.rating}</p>
+    <img src={`/posters/${movie.title}.jpg`} alt={`Poster for ${movie.title}`} />
+    {/* A comment inside JSX looks like this */}
+  </article>
+);
+```
+
+Things to notice:
+
+- Braces work inside text (`{movie.year}`) and in attribute values (`src={...}`).
+- Only expressions fit between the braces: values, function calls, ternaries. Statements such as `if` and `for` do not. Lesson 8 shows the patterns you use instead.
+- The `style` attribute takes an **object**, so you see double braces: `style={{ color: 'green' }}`. The outer pair means "JavaScript here" and the inner pair is the object.
+- Text and numbers render. `true`, `false`, `null` and `undefined` render nothing. Objects cannot be rendered directly.
+
+<Aside type="tip" title="What JSX turns into">
+`<h1 className="big">Hi</h1>` becomes a call like `jsx('h1', { className: 'big', children: 'Hi' })`, which returns a plain description of the element called a React element. Modern tooling adds this automatically, so you no longer write `import React from 'react'` in every file.
+</Aside>
+
+## Two rules for components
+
+1. **Keep them pure.** Given the same inputs, a component should return the same JSX, and it should not change anything outside itself while rendering.
+2. **Define components at the top level of a file.** Do not write one function inside another. A component declared inside another component is recreated on every render, which resets its state and slows the app down.
+
+## Check yourself
+
+1. Fix the JSX. It has four problems.
+
+   ```jsx
+   function Broken() {
+     return (
+       <h2 class="title">Title</h2>
+       <label for="name">Name</label>
+       <input id="name" tabindex="1">
+     );
+   }
+   ```
+
+2. Create a `Footer` component that shows `Filmshelf © ` followed by the current year, and add it to `App`.
+3. Why does `<movieCard />` render nothing useful?
+4. What does `style={{ color: 'red' }}` mean? Why two pairs of braces?
+
+<details>
+<summary>Answers</summary>
+
+1. The problems are `class` (use `className`), `for` (use `htmlFor`), `tabindex` (use `tabIndex`, which takes a number in braces), the unclosed `<input>`, and the missing single root. Fixed:
+
+   ```jsx
+   function Fixed() {
+     return (
+       <>
+         <h2 className="title">Title</h2>
+         <label htmlFor="name">Name</label>
+         <input id="name" tabIndex={1} />
+       </>
+     );
+   }
+   ```
+
+2. ```jsx title="src/components/Footer.jsx"
+   export default function Footer() {
+     return <footer>Filmshelf © {new Date().getFullYear()}</footer>;
+   }
+   ```
+
+   Import it in `App.jsx` and place `<Footer />` after the layout `div`, inside the fragment.
+
+3. React treats lowercase tag names as built-in HTML elements, so it renders an unknown `<moviecard>` element. Component names must start with a capital letter.
+4. The outer braces switch from JSX to JavaScript, and the inner braces are the JavaScript object `{ color: 'red' }` that the `style` attribute expects.
+
+</details>

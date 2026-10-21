@@ -1,0 +1,476 @@
+---
+title: "15. Testing Django Applications"
+description: "Write automated tests for models, views, forms, permissions, uploads, management commands and the API with Django's test client."
+difficulty: advanced
+readingTime: 18
+tags: [django, testing, tdd, drf]
+sidebar:
+  order: 15
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Clicking through a site after every change does not scale. Automated tests run in seconds, protect the rules you worked
+hard on (like "members cannot delete other members' reviews") and let you refactor with confidence.
+
+Django's test tools are built on Python's `unittest`:
+
+| Tool | Purpose |
+| ---- | ------- |
+| `django.test.TestCase` | Test class that wraps every test in a transaction and rolls it back, so tests do not affect each other |
+| `self.client` | A fake browser that makes requests to your URLs without running a server |
+| `rest_framework.test.APITestCase` / `APIClient` | The same, with JSON helpers and token support |
+| `call_command` | Run a management command inside a test |
+| `override_settings` | Change a setting for one test |
+
+Tests run against a **temporary test database**, never your real one.
+
+```sh
+python manage.py test                  # everything
+python manage.py test books            # one app
+python manage.py test books.tests.BookViewTests.test_search_filters_results   # one test
+python manage.py test --failfast       # stop at the first failure
+```
+
+## Anatomy of a test
+
+```python
+from django.test import TestCase
+
+
+class MathTests(TestCase):
+    def setUp(self):                       # runs before every test method
+        self.value = 2
+
+    def test_addition(self):               # method names must start with test_
+        self.assertEqual(self.value + 2, 4)
+```
+
+Use `setUpTestData` (a class method) for data shared by all tests in the class. It runs once, which is much faster than creating rows before each test.
+
+Good tests are **small**, **independent** and **named after the behaviour** they protect.
+
+## The Book Club test suite
+
+Everything below goes in one file. Read it in sections.
+
+### Setup and models
+
+```python title="books/tests.py"
+import csv
+import shutil
+import tempfile
+from datetime import date
+from io import BytesIO, StringIO
+from pathlib import Path
+
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.db import IntegrityError, transaction
+from django.test import TestCase, override_settings
+from django.urls import reverse
+from PIL import Image
+from rest_framework.authtoken.models import Token
+from rest_framework.test import APITestCase
+
+from .models import Author, Book, Genre, Review
+
+User = get_user_model()
+
+
+def make_library():
+    """Shared sample data, used by several test classes."""
+    herbert = Author.objects.create(name="Frank Herbert", born=1920)
+    gibson = Author.objects.create(name="William Gibson", born=1948)
+    dune = Book.objects.create(title="Dune", author=herbert, published_year=1965, pages=412)
+    neuromancer = Book.objects.create(title="Neuromancer", author=gibson, published_year=1984, pages=271)
+    scifi = Genre.objects.create(name="Science Fiction")
+    dune.genres.add(scifi)
+    neuromancer.genres.add(scifi)
+    return dune, neuromancer
+
+
+class BookModelTests(TestCase):
+    def test_string_representations(self):
+        dune, _ = make_library()
+        self.assertEqual(str(dune), "Dune")
+        self.assertEqual(str(dune.author), "Frank Herbert")
+
+    def test_a_user_can_review_a_book_only_once(self):
+        dune, _ = make_library()
+        mia = User.objects.create_user("mia", password="secret-pass-123")
+        Review.objects.create(book=dune, user=mia, rating=5)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():           # keeps the test's own transaction usable
+                Review.objects.create(book=dune, user=mia, rating=4)
+```
+
+### Views: pages, search and queries
+
+```python title="books/tests.py (continued)"
+class BookViewTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.dune, cls.neuromancer = make_library()
+        cls.member = User.objects.create_user("mia", password="secret-pass-123")
+        cls.librarian = User.objects.create_user("sam", password="secret-pass-123")
+        call_command("setup_roles", stdout=StringIO())                 # creates the Librarians group
+        cls.librarian.groups.add(Group.objects.get(name="Librarians"))
+
+    def test_list_page_shows_books(self):
+        response = self.client.get(reverse("books:book_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "books/book_list.html")
+        self.assertContains(response, "Dune")
+        self.assertContains(response, "Neuromancer")
+
+    def test_search_filters_results(self):
+        response = self.client.get(reverse("books:book_list"), {"q": "gibson"})
+        self.assertContains(response, "Neuromancer")
+        self.assertNotContains(response, "Dune")
+
+    def test_sort_newest_first(self):
+        response = self.client.get(reverse("books:book_list"), {"sort": "newest"})
+        titles = [book.title for book in response.context["books"]]
+        self.assertEqual(titles, ["Neuromancer", "Dune"])
+
+    def test_list_page_does_not_run_a_query_per_book(self):
+        # count + books + genres prefetch, no matter how many books exist
+        with self.assertNumQueries(3):
+            self.client.get(reverse("books:book_list"))
+
+    def test_detail_page_and_missing_book(self):
+        self.assertEqual(self.client.get(reverse("books:book_detail", args=[self.dune.pk])).status_code, 200)
+        self.assertEqual(self.client.get(reverse("books:book_detail", args=[9999])).status_code, 404)
+
+    def test_anonymous_user_is_sent_to_login(self):
+        url = reverse("books:book_create")
+        response = self.client.get(url)
+        self.assertRedirects(response, f"{reverse('login')}?next={url}")
+
+    def test_member_without_permission_gets_403(self):
+        self.client.force_login(self.member)              # skips the login form
+        self.assertEqual(self.client.get(reverse("books:book_create")).status_code, 403)
+
+    def test_librarian_can_add_a_book(self):
+        self.client.force_login(self.librarian)
+        response = self.client.post(reverse("books:book_create"), {
+            "title": "  Emma  ",                          # the form trims whitespace
+            "author": self.dune.author.pk,
+            "published_year": 1815,
+            "pages": 474,
+            "summary": "",
+        })
+        book = Book.objects.get(title="Emma")
+        self.assertRedirects(response, reverse("books:book_detail", args=[book.pk]))
+        self.assertEqual(book.added_by, self.librarian)
+
+    def test_invalid_form_shows_errors_and_saves_nothing(self):
+        self.client.force_login(self.librarian)
+        response = self.client.post(reverse("books:book_create"), {
+            "title": "Time Travel", "author": self.dune.author.pk, "published_year": 3000, "pages": 10,
+        })
+        self.assertEqual(response.status_code, 200)       # the form is shown again
+        self.assertFormError(
+            response.context["form"], "published_year", f"Enter a year between 1000 and {date.today().year}."
+        )
+        self.assertFalse(Book.objects.filter(title="Time Travel").exists())
+
+    def test_duplicate_title_for_same_author_is_rejected(self):
+        self.client.force_login(self.librarian)
+        response = self.client.post(reverse("books:book_create"), {
+            "title": "dune", "author": self.dune.author.pk, "published_year": 1965, "pages": 412,
+        })
+        self.assertContains(response, "already has a book with this title")
+
+    def test_signup_creates_a_user_and_logs_in(self):
+        response = self.client.post(reverse("signup"), {
+            "username": "newbie", "password1": "a-very-long-pass-77", "password2": "a-very-long-pass-77",
+        })
+        self.assertRedirects(response, reverse("books:book_list"))
+        self.assertTrue(User.objects.filter(username="newbie").exists())
+```
+
+### Ownership and uploads
+
+```python title="books/tests.py (continued)"
+class ReviewOwnershipTests(TestCase):
+    def setUp(self):
+        self.dune, self.neuromancer = make_library()
+        self.mia = User.objects.create_user("mia", password="secret-pass-123")
+        self.sam = User.objects.create_user("sam", password="secret-pass-123")
+        self.review = Review.objects.create(book=self.dune, user=self.mia, rating=5, text="Great")
+
+    def test_member_can_write_a_review(self):
+        self.client.force_login(self.sam)
+        response = self.client.post(reverse("books:review_create", args=[self.dune.pk]), {"rating": 4, "text": "Good"})
+        self.assertRedirects(response, reverse("books:book_detail", args=[self.dune.pk]))
+        self.assertEqual(Review.objects.get(user=self.sam).rating, 4)
+
+    def test_posting_again_updates_instead_of_duplicating(self):
+        self.client.force_login(self.mia)
+        self.client.post(reverse("books:review_create", args=[self.dune.pk]), {"rating": 3, "text": "Changed my mind"})
+        self.assertEqual(Review.objects.filter(user=self.mia).count(), 1)
+        self.review.refresh_from_db()
+        self.assertEqual(self.review.rating, 3)
+
+    def test_rating_must_be_between_1_and_5(self):
+        self.client.force_login(self.sam)
+        response = self.client.post(reverse("books:review_create", args=[self.dune.pk]), {"rating": 9, "text": ""})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Review.objects.filter(user=self.sam).exists())
+
+    def test_user_cannot_delete_someone_elses_review(self):
+        self.client.force_login(self.sam)
+        response = self.client.post(reverse("books:review_delete", args=[self.review.pk]))
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Review.objects.filter(pk=self.review.pk).exists())
+
+    def test_my_reviews_only_lists_my_reviews(self):
+        Review.objects.create(book=self.neuromancer, user=self.sam, rating=2, text="Not for me")
+        self.client.force_login(self.mia)
+        response = self.client.get(reverse("books:my_reviews"))
+        self.assertEqual([r.user for r in response.context["reviews"]], [self.mia])
+
+
+def tiny_png():
+    buffer = BytesIO()
+    Image.new("RGB", (4, 4), "navy").save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+class UploadTests(TestCase):
+    def setUp(self):
+        self.media = tempfile.mkdtemp()                      # a throwaway MEDIA_ROOT
+        self.addCleanup(shutil.rmtree, self.media, ignore_errors=True)
+        self.dune, _ = make_library()
+        self.sam = User.objects.create_user("sam", password="secret-pass-123", is_superuser=True)
+
+    def post_book(self, cover):
+        with override_settings(MEDIA_ROOT=self.media):
+            self.client.force_login(self.sam)
+            return self.client.post(reverse("books:book_create"), {
+                "title": "Emma", "author": self.dune.author.pk,
+                "published_year": 1815, "pages": 474, "cover": cover,
+            })
+
+    def test_a_real_image_is_stored(self):
+        response = self.post_book(SimpleUploadedFile("cover.png", tiny_png(), content_type="image/png"))
+        self.assertEqual(response.status_code, 302)
+        book = Book.objects.get(title="Emma")
+        self.assertTrue(book.cover.name.startswith("covers/"))
+        self.assertTrue(Path(self.media, book.cover.name).exists())
+
+    def test_a_fake_image_is_rejected(self):
+        response = self.post_book(SimpleUploadedFile("cover.png", b"not really an image", content_type="image/png"))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Book.objects.filter(title="Emma").exists())
+```
+
+### Management commands
+
+```python title="books/tests.py (continued)"
+class CommandTests(TestCase):
+    def write_csv(self, rows):
+        path = Path(tempfile.mkdtemp(), "books.csv")
+        self.addCleanup(shutil.rmtree, path.parent, ignore_errors=True)
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["title", "author", "year", "pages", "genres"])
+            writer.writerows(rows)
+        return path
+
+    def test_import_creates_books_authors_and_genres(self):
+        path = self.write_csv([["Dune", "Frank Herbert", 1965, 412, "Science Fiction"],
+                               ["Neuromancer", "William Gibson", 1984, 271, "Science Fiction;Cyberpunk"]])
+        out = StringIO()
+        call_command("import_books", path, stdout=out)
+        self.assertIn("Imported 2 book(s)", out.getvalue())
+        self.assertEqual(Genre.objects.count(), 2)
+        self.assertEqual(Book.objects.get(title="Neuromancer").genres.count(), 2)
+
+    def test_import_is_safe_to_repeat(self):
+        path = self.write_csv([["Dune", "Frank Herbert", 1965, 412, ""]])
+        call_command("import_books", path, stdout=StringIO())
+        call_command("import_books", path, stdout=StringIO())
+        self.assertEqual(Book.objects.count(), 1)
+
+    def test_dry_run_saves_nothing(self):
+        path = self.write_csv([["Dune", "Frank Herbert", 1965, 412, ""]])
+        call_command("import_books", path, "--dry-run", stdout=StringIO())
+        self.assertEqual(Book.objects.count(), 0)
+        self.assertEqual(Author.objects.count(), 0)
+
+    def test_bad_number_aborts_the_whole_import(self):
+        path = self.write_csv([["Dune", "Frank Herbert", 1965, 412, ""], ["Broken", "Nobody", "abc", 1, ""]])
+        with self.assertRaisesMessage(CommandError, "Line 3"):
+            call_command("import_books", path, stdout=StringIO())
+        self.assertEqual(Book.objects.count(), 0)            # atomic: the first row was rolled back too
+
+    def test_setup_roles_is_idempotent(self):
+        call_command("setup_roles", stdout=StringIO())
+        call_command("setup_roles", stdout=StringIO())
+        self.assertEqual(Group.objects.get(name="Librarians").permissions.count(), 3)
+```
+
+### The API
+
+`APITestCase` gives you `self.client` as an `APIClient`. Use `force_authenticate` for quick tests or real tokens for end-to-end checks.
+
+```python title="books/tests.py (continued)"
+class BookAPITests(APITestCase):
+    def setUp(self):
+        self.dune, self.neuromancer = make_library()
+        self.mia = User.objects.create_user("mia", password="secret-pass-123")
+        self.sam = User.objects.create_user("sam", password="secret-pass-123")
+        call_command("setup_roles", stdout=StringIO())
+        self.librarian = User.objects.create_user("lib", password="secret-pass-123")
+        self.librarian.groups.add(Group.objects.get(name="Librarians"))
+
+    def test_anyone_can_list_books(self):
+        response = self.client.get(reverse("api:book-list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(response.data["results"][0]["author_name"], "Frank Herbert")
+
+    def test_search_and_ordering(self):
+        response = self.client.get(reverse("api:book-list"), {"search": "gibson"})
+        self.assertEqual([b["title"] for b in response.data["results"]], ["Neuromancer"])
+        response = self.client.get(reverse("api:book-list"), {"ordering": "-pages"})
+        self.assertEqual([b["title"] for b in response.data["results"]], ["Dune", "Neuromancer"])
+
+    def test_anonymous_cannot_create(self):
+        response = self.client.post(reverse("api:book-list"), {"title": "X"}, format="json")
+        self.assertEqual(response.status_code, 403)
+
+    def test_member_without_model_permission_cannot_create(self):
+        self.client.force_authenticate(self.mia)
+        response = self.client.post(reverse("api:book-list"), {"title": "X"}, format="json")
+        self.assertEqual(response.status_code, 403)
+
+    def test_librarian_creates_a_book_with_genres_by_name(self):
+        self.client.force_authenticate(self.librarian)
+        response = self.client.post(reverse("api:book-list"), {
+            "title": "Count Zero", "author": self.neuromancer.author.pk,
+            "published_year": 1986, "pages": 256, "genres": ["Science Fiction"],
+        }, format="json")
+        self.assertEqual(response.status_code, 201)
+        book = Book.objects.get(title="Count Zero")
+        self.assertEqual(book.added_by, self.librarian)
+        self.assertEqual(list(book.genres.values_list("name", flat=True)), ["Science Fiction"])
+
+    def test_validation_errors_are_returned_as_400(self):
+        self.client.force_authenticate(self.librarian)
+        response = self.client.post(reverse("api:book-list"), {
+            "title": "123", "author": self.dune.author.pk, "published_year": 1, "pages": 5,
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("title", response.data)
+        self.assertIn("published_year", response.data)
+
+    def test_token_login_and_use(self):
+        response = self.client.post(reverse("api:token"), {"username": "mia", "password": "secret-pass-123"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        token = response.data["token"]
+        self.assertEqual(token, Token.objects.get(user=self.mia).key)
+
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+        response = self.client.post(reverse("api:review-list"), {"book": self.dune.pk, "rating": 5, "text": "Great"}, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["user"], "mia")
+
+    def test_cannot_review_the_same_book_twice(self):
+        self.client.force_authenticate(self.mia)
+        payload = {"book": self.dune.pk, "rating": 5}
+        self.assertEqual(self.client.post(reverse("api:review-list"), payload, format="json").status_code, 201)
+        self.assertEqual(self.client.post(reverse("api:review-list"), payload, format="json").status_code, 400)
+
+    def test_only_the_owner_can_change_a_review(self):
+        review = Review.objects.create(book=self.dune, user=self.mia, rating=5)
+        url = reverse("api:review-detail", args=[review.pk])
+
+        self.client.force_authenticate(self.sam)
+        self.assertEqual(self.client.patch(url, {"rating": 1}, format="json").status_code, 403)
+        self.assertEqual(self.client.delete(url).status_code, 403)
+
+        self.client.force_authenticate(self.mia)
+        self.assertEqual(self.client.patch(url, {"rating": 4}, format="json").status_code, 200)
+        self.assertEqual(self.client.delete(url).status_code, 204)
+
+    def test_custom_actions(self):
+        Review.objects.create(book=self.dune, user=self.mia, rating=5)
+        Review.objects.create(book=self.neuromancer, user=self.mia, rating=3)
+        reviews = self.client.get(reverse("api:book-reviews", args=[self.dune.pk]))
+        self.assertEqual(len(reviews.data), 1)
+        top = self.client.get(reverse("api:book-top-rated"))
+        self.assertEqual([b["title"] for b in top.data], ["Dune", "Neuromancer"])
+
+    def test_my_reviews_requires_login_and_is_scoped(self):
+        self.assertEqual(self.client.get(reverse("api:my_reviews")).status_code, 403)
+        Review.objects.create(book=self.dune, user=self.mia, rating=5)
+        self.client.force_authenticate(self.sam)
+        self.assertEqual(self.client.get(reverse("api:my_reviews")).data, [])
+```
+
+## Reading test output
+
+```text
+Found 36 test(s).
+Creating test database for alias 'default'...
+....................................
+----------------------------------------------------------------------
+Ran 36 tests in 9.1s
+
+OK
+```
+
+When a test fails Django prints the test name, the line, and both values compared. Read the **last** lines of the traceback first.
+
+## What to test
+
+| Test this | Do not bother with |
+| --------- | ------------------ |
+| Rules you wrote: validation, permissions, calculations | Django's own behaviour (it has thousands of tests) |
+| Every status code a view can return (200, 302, 403, 404) | Exact HTML whitespace |
+| Security: who can see or change what | Third-party libraries |
+| Bugs, with a test that fails first | |
+
+<Aside type="tip" title="Test-first for bugs">
+When you find a bug, write a test that fails because of it, then fix the code until it passes. The bug can then never return unnoticed.
+</Aside>
+
+## Useful assertions
+
+| Assertion | Checks |
+| --------- | ------ |
+| `assertContains(response, text)` | Status 200 and the text appears |
+| `assertRedirects(response, url)` | The redirect target (and that the target loads) |
+| `assertTemplateUsed(response, name)` | Which template rendered |
+| `assertFormError(form, field, message)` | A form rejected the input |
+| `assertNumQueries(n)` | Exactly `n` database queries |
+| `assertRaises` / `assertRaisesMessage` | An exception type (and message) |
+
+## Check yourself
+
+1. Why do tests use `force_login` instead of the login form in most cases?
+2. What is the benefit of `setUpTestData` over `setUp`?
+3. Write a test that proves a member cannot open the edit page for a book.
+
+<details>
+<summary>Answers</summary>
+
+1. It is quicker and keeps each test focused. Login itself is tested once, separately.
+2. It creates the shared rows once for the whole class, while `setUp` repeats the work before every test method. Django also isolates the data between tests so they cannot interfere.
+3. 
+
+```python
+def test_member_cannot_edit_books(self):
+    self.client.force_login(self.member)
+    response = self.client.get(reverse("books:book_update", args=[self.dune.pk]))
+    self.assertEqual(response.status_code, 403)
+```
+
+</details>

@@ -1,0 +1,303 @@
+---
+title: "17. Building and Deploying"
+description: "Build Filmshelf for production, fix single-page-app routing on static hosts, and deploy to GitHub Pages with a workflow that tests first."
+difficulty: advanced
+readingTime: 24
+tags: [react, vite, deployment, github-pages, netlify, vercel, github-actions]
+sidebar:
+  order: 17
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+An app that only runs on your laptop is a draft. This lesson takes Filmshelf from `npm run dev` to a public URL: building the production bundle, solving the routing problem every single-page app meets on a static host, and automating the deployment so that a `git push` is all it takes.
+
+## What a build does
+
+`npm run dev` starts a development server that serves your source files with helpful extras. A real visitor needs something different: a small set of optimised files. `npm run build` (which runs `vite build`) produces them in the `dist/` folder.
+
+```text
+dist/
+├── index.html
+├── favicon.svg
+├── movies.json          <- everything from public/ is copied as is
+└── assets/
+    ├── index-mgEh76Hs.js   <- all your JavaScript, bundled and minified
+    └── index-Bg9BcGxe.css  <- all your CSS
+```
+
+- The JavaScript is **bundled** (many modules joined into a few files), **minified** (whitespace and long names removed), and **tree-shaken** (code nobody imports is dropped).
+- File names contain a **content hash**, such as `index-mgEh76Hs.js`. A new build with different code gets a different name, so browsers and CDNs can cache the files for a long time and still pick up every update.
+- Everything in `public/` is copied to the root of `dist/` unchanged, which is why `movies.json` and `favicon.svg` live there.
+
+For Filmshelf, the build reports about 406 kB of JavaScript, which is roughly 132 kB after gzip compression, with React, React Router, TanStack Query, Redux Toolkit and the form library all included. That is the size users actually download.
+
+### Preview the production build
+
+The production code is not identical to the development code (React removes its development warnings, for one), so test it before you ship it.
+
+```sh
+npm run build
+npm run preview
+```
+
+`vite preview` serves `dist/` locally, normally at `http://localhost:4173`. It is only a local check and not meant for hosting.
+
+### Pre-flight checklist
+
+Run these in order. If one fails, fix it before you deploy.
+
+```sh
+npm run lint        # static checks
+npm run test:run    # all tests (Lesson 16)
+npm run build       # does it compile for production?
+npm run preview     # click through the app yourself
+```
+
+## Environment variables
+
+Settings that differ between your machine and production, such as an API address, belong in environment variables. Vite reads them from `.env` files in the project root:
+
+```text
+.env                 loaded in every mode
+.env.local           loaded in every mode, ignored by git
+.env.production      loaded only for `vite build`
+.env.development     loaded only for `vite` (dev server)
+```
+
+```sh title=".env.production"
+VITE_API_URL=https://api.example.com
+```
+
+```js
+const apiUrl = import.meta.env.VITE_API_URL;
+```
+
+Only variables beginning with **`VITE_`** are included in your code. Other names stay private to the build tools. A few built-in values are always available: `import.meta.env.MODE`, `import.meta.env.DEV`, `import.meta.env.PROD` and `import.meta.env.BASE_URL`.
+
+<Aside type="danger" title="Variables are public">
+Anything exposed with `VITE_` is written into the JavaScript files that every visitor downloads. Never put passwords, private API keys or tokens in a front-end `.env` file. Keep them on a server that your app calls.
+</Aside>
+
+## The single-page app routing problem
+
+This is the problem that catches almost everyone on their first deploy.
+
+In development, you opened `/movies/3` and it worked. On a plain static host, it does not, because the host looks for a file or folder named `movies/3`, finds nothing and returns a 404 page. Your app never gets a chance to load. Clicking links inside the app works (the router changes the URL without asking the server), but refreshing or pasting a deep link fails.
+
+The fix is to make the host answer unknown paths with `index.html`, so React Router can read the URL and render the right page. How you do that depends on the host:
+
+| Host | What to do |
+| ---- | ---------- |
+| **GitHub Pages** | No rewrite rules exist. Copy `index.html` to `404.html` after the build (shown below), or use `HashRouter` |
+| **Netlify** | Add a `_redirects` file to `public/` containing `/* /index.html 200` |
+| **Vercel** | Add a `vercel.json` with a rewrite from `/(.*)` to `/index.html` |
+| **Cloudflare Pages** | Automatic. Without a top-level `404.html`, Pages treats the project as an SPA and serves the root for unknown paths |
+| **Firebase Hosting** | Add a rewrite of `**` to `/index.html` in `firebase.json` |
+
+The Netlify and Vercel versions, as documented by those hosts:
+
+```text title="public/_redirects (Netlify)"
+/* /index.html 200
+```
+
+```json title="vercel.json (Vercel)"
+{
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
+```
+
+The status code `200` on the Netlify rule makes it a **rewrite**: the address bar keeps `/movies/3` while the server sends `index.html`.
+
+<Aside type="note" title="HashRouter: a router without server setup">
+React Router also has `HashRouter`, which puts the route after a `#` (`/#/movies/3`). Servers never see the part after the `#`, so every static host works with no configuration. The trade-off is uglier URLs. Prefer `BrowserRouter` with a rewrite wherever you can.
+</Aside>
+
+## Deploying to GitHub Pages
+
+GitHub Pages hosts static sites straight from a repository, for free. A **project site** lives at `https://<username>.github.io/<repository>/`, which means the app is served from a sub-path and not from the domain root. Two tools need to know about that: Vite (so asset links are right) and React Router (so routes are right).
+
+### 1. Set the base path
+
+Vite's `base` option sets the prefix for every asset URL. Use a separate **mode** for the Pages build so your normal builds are not affected.
+
+```js title="vite.config.js"
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig(({ mode }) => ({
+  plugins: [react()],
+  // `vite build --mode pages` builds for https://<user>.github.io/<repository>/
+  base: mode === 'pages' ? '/SDEV-Resources/' : '/',
+  test: {
+    // ...unchanged
+  },
+}));
+```
+
+Replace `SDEV-Resources` with your repository name, with a slash on both sides. Paths are case-sensitive on GitHub Pages.
+
+Everything else already follows this value because of habits from earlier lessons: `import.meta.env.BASE_URL` becomes `/SDEV-Resources/`, so the `BrowserRouter` `basename` (Lesson 13) and the request for `movies.json` (Lesson 14) both point at the right place.
+
+### 2. Add the 404 fallback
+
+GitHub Pages serves a repository's `404.html` for unknown paths. If that file is a copy of your `index.html`, the app loads and React Router renders the right page.
+
+```js title="scripts/copy-404.mjs"
+import { copyFileSync } from 'node:fs';
+
+// GitHub Pages cannot rewrite URLs, but it serves 404.html for unknown paths.
+// Giving it a copy of index.html lets React Router handle deep links.
+copyFileSync('dist/index.html', 'dist/404.html');
+```
+
+```json title="package.json (scripts)"
+"build:pages": "vite build --mode pages && node scripts/copy-404.mjs"
+```
+
+To check the fallback, the project was built with `npm run build:pages` and `dist/` was served from a small server that behaves like GitHub Pages (serve the file if it exists, otherwise serve `404.html`). A deep link to `/SDEV-Resources/movies/3` showed the Paper Moons detail page, a refresh on a detail page stayed on it, and an unknown path showed the not-found page.
+
+Two side effects to know about. The host answers the deep link with a real 404 status, so the browser console shows a failed-request message even though the page works, and search engines may not index those pages. For a portfolio app this rarely matters. If it does, use a host with proper rewrites.
+
+### 3. Automate it with GitHub Actions
+
+A **workflow** is a YAML file that GitHub runs when something happens in your repository. This one tests the app, builds it and publishes it every time you push to `main`. If the tests fail, nothing is deployed.
+
+```yaml title=".github/workflows/deploy.yml"
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test:run
+      - run: npm run build:pages
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./dist
+      - id: deployment
+        uses: actions/deploy-pages@v5
+```
+
+This follows the workflow in the [Vite static deployment guide](https://vite.dev/guide/static-deploy), with lint, test and the Pages build added. Walking through it:
+
+- **`on`** lists the triggers: a push to `main`, or a manual run.
+- **`permissions`** gives the workflow only what it needs, including permission to publish to Pages.
+- **`concurrency`** makes a newer deployment cancel one that is still running.
+- **`npm ci`** installs exactly the versions in `package-lock.json`, so the server builds what you built. Commit the lock file.
+- **`lint` and `test:run`** run before the build. A failing step stops the job.
+- **`upload-pages-artifact`** packages `dist/`, and **`deploy-pages`** publishes it.
+- The version tags (`@v7`, `@v6`, `@v5`) were the current major versions in Vite's guide in October 2026. When GitHub warns about a deprecated version, update the number.
+
+<Steps>
+
+1. Create a repository on GitHub and push your project to the `main` branch. Check that `node_modules/`, `dist/`, `coverage/` and `.env.local` are in `.gitignore`. Vite's starter ignores the first two and anything ending in `.local`, so add `coverage` yourself.
+2. Add the workflow file above at `.github/workflows/deploy.yml`, then commit and push it.
+3. In the repository, open **Settings**, then **Pages**, and under **Build and deployment** choose **GitHub Actions** as the source.
+4. Open the **Actions** tab and watch the run. When it turns green, the job summary shows the site URL.
+5. Visit `https://<username>.github.io/<repository>/`, open a movie, and refresh the page to confirm the deep link works.
+
+</Steps>
+
+If the page loads but is blank, open the browser console. Failed requests for `/assets/...` mean `base` does not match the repository name, and a 404 for `movies.json` means the request is missing `import.meta.env.BASE_URL`.
+
+## Deploying elsewhere
+
+Netlify, Vercel and Cloudflare Pages can all watch a GitHub repository and rebuild on every push. The setup is almost identical:
+
+| Setting | Value |
+| ------- | ----- |
+| Build command | `npm run build` |
+| Output directory | `dist` |
+| Node version | The current LTS (React Router 8 needs Node 22.22 or newer) |
+| Routing | The SPA setting for that host from the table above |
+
+These hosts serve the site from the root of a domain, so you do not need the `pages` mode or the 404 copy. They also create a **preview deployment** for each pull request, which is a convenient way to review changes before merging. Environment variables are set in each host's dashboard rather than in a committed file.
+
+## Making it faster to load
+
+### Code splitting with lazy
+
+By default, Vite puts all your code in one file. `React.lazy` loads a component only when it is first needed, and `Suspense` shows a fallback in the meantime.
+
+```jsx title="src/App.jsx"
+import { lazy, Suspense } from 'react';
+import { Route, Routes } from 'react-router';
+import Layout from './components/Layout.jsx';
+import HomePage from './pages/HomePage.jsx';
+import NotFoundPage from './pages/NotFoundPage.jsx';
+
+// Downloaded only when someone opens a movie page
+const MovieDetailPage = lazy(() => import('./pages/MovieDetailPage.jsx'));
+
+export default function App() {
+  return (
+    <Suspense fallback={<p>Loading page...</p>}>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<HomePage />} />
+          <Route path="movies/:id" element={<MovieDetailPage />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Route>
+      </Routes>
+    </Suspense>
+  );
+}
+```
+
+After a build, the output contains a separate `MovieDetailPage-<hash>.js` file. This page is tiny (under 1 kB), so Filmshelf gains nothing here. Splitting pays off for pages that pull in large libraries, such as a charting page. The tests still pass with the lazy page, because `findBy` queries wait for it to load.
+
+### Other quick wins
+
+- **Compress images** and use modern formats (WebP, AVIF). Images are usually the heaviest part of a page.
+- **Let hashed files cache.** Hosts that serve `assets/` with long cache headers make repeat visits nearly instant.
+- **Measure.** Open Chrome DevTools, go to **Lighthouse**, and run an audit for performance, accessibility and SEO. It lists specific problems with fixes.
+- **Mind the bundle.** Prefer small libraries, and import only what you use.
+
+### A note on SEO
+
+A client-rendered React app sends an almost empty HTML file and builds the page with JavaScript. Search engines can run JavaScript, but social previews and some crawlers read only the HTML. That is fine for dashboards and tools behind a login. For public content that needs to be found, use **server-side rendering** or **static site generation**, which frameworks such as Next.js and React Router's framework mode provide. Lesson 18 points you towards them.
+
+## Check yourself
+
+1. Why does opening `/movies/3` directly work in `npm run dev` but return a 404 on a plain static host?
+2. What is the `base` option for, and why does Filmshelf only set it in the `pages` mode?
+3. Why is `npm ci` preferred over `npm install` in a workflow?
+4. You added `VITE_STRIPE_SECRET=sk_live_...` to `.env`. What is wrong?
+5. Write the Netlify rule that makes every unknown path serve `index.html`.
+
+<details>
+<summary>Answers</summary>
+
+1. The Vite dev server answers every path with `index.html`. A plain static host looks for a real file or folder at that path, finds none and returns 404, so the router never loads. Fix it with the host's rewrite setting, or with the `404.html` copy on GitHub Pages.
+2. `base` is the prefix added to asset URLs when the app is served from a sub-path such as `/SDEV-Resources/`. Normal builds and the dev server serve from `/`, so the prefix is only wanted in the GitHub Pages build.
+3. `npm ci` installs exactly what `package-lock.json` lists, fails if the lock file and `package.json` disagree, and starts from a clean `node_modules`. The deployed build matches what you tested.
+4. Variables that start with `VITE_` are embedded in the JavaScript that every visitor downloads, so a secret key is exposed. Keep it on a server and have the app call your server.
+5. `/* /index.html 200` in a file named `_redirects` inside `public/`.
+
+</details>

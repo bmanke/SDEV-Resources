@@ -1,0 +1,75 @@
+---
+title: "ReactJS Guide"
+description: "A step-by-step path through React 19 for SDEV-2150: components, hooks, routing, data, state, testing and deployment, built around one project."
+sidebar:
+  label: Overview
+  order: 0
+---
+
+import { Aside, LinkButton } from '@astrojs/starlight/components';
+
+A step-by-step path through React for SDEV-2150 Intermediate Frontend Development. Every lesson adds one piece to **Filmshelf**, a movie tracker with search, filters, favorites, a detail page, a validated form, dark mode, tests and a public deployment. The finished project builds for production and passes the 29 tests written in Lesson 16.
+
+The topics and their order follow the roadmap in the free ReactJS Guide from [JSMastery](https://jsmastery.com/). The lessons themselves, including all examples and exercises, were written for this site. The original guide is available on the [ReactJS Guide resource page](/resources/reactjs-guide/), next to the [Emmet cheatsheet](/resources/emmet-cheatsheet/).
+
+## Before you start
+
+- You should be comfortable with HTML, CSS and basic JavaScript. Lesson 1 reviews the JavaScript that React depends on. [Frontend Development](/lessons/frontend-development/) covers the same ground in more depth.
+- Install Git and a current Node.js LTS release. Vite 8 needs Node 20.19 or newer, or 22.12 or newer. React Router 8, which you will use in Lesson 13, needs Node 22.22 or newer. See [Tooling: Git, Node and Vite](/lessons/frontend-development/01-tooling-git-node-and-vite/) for the daily workflow.
+- A code editor such as VS Code. The [Emmet cheatsheet](/resources/emmet-cheatsheet/) speeds up writing HTML and CSS in it.
+
+## How to use these lessons
+
+1. Go in order. Each lesson builds on the one before it, and the project grows as you go.
+2. **Type the examples yourself** instead of pasting them, and change them to see what breaks.
+3. Do the "Check yourself" exercises before opening the answers.
+4. Commit to Git at the end of each lesson, so you can always go back.
+
+## Lessons
+
+| Lesson | What you will learn | Level | Time |
+| ------ | ------------------- | ----- | ---- |
+| [1. Introduction and JavaScript Prerequisites](/sdev-2150-intermediate-frontend/reactjs-guide/01-introduction-and-javascript-prerequisites/) | Learn what React is and why it is worth learning, then check that the JavaScript it builds on is solid. | Beginner | 14 min |
+| [2. Setup and Project Structure](/sdev-2150-intermediate-frontend/reactjs-guide/02-setup-and-project-structure/) | Install Node.js and Git, create a React project with Vite, and learn what every starter file does. | Beginner | 13 min |
+| [3. Components and JSX](/sdev-2150-intermediate-frontend/reactjs-guide/03-components-and-jsx/) | Split a page into components, write them as functions that return JSX, and learn where JSX differs from HTML. | Beginner | 16 min |
+| [4. Props and Lists](/sdev-2150-intermediate-frontend/reactjs-guide/04-props-and-lists/) | Pass data into components with props, share layout with children, and render a list of components from an array. | Beginner | 16 min |
+| [5. State with useState](/sdev-2150-intermediate-frontend/reactjs-guide/05-state-with-usestate/) | Give a component a memory with useState, update it safely, and lift state up so components can share it. | Beginner | 18 min |
+| [6. Events and Forms](/sdev-2150-intermediate-frontend/reactjs-guide/06-events-and-forms/) | Handle clicks, typing and form submission, and build controlled inputs that keep state and the screen in sync. | Beginner | 18 min |
+| [7. Styling React Components](/sdev-2150-intermediate-frontend/reactjs-guide/07-styling-react-components/) | Style components with inline styles, plain CSS, CSS Modules, Tailwind CSS and Sass, and know when a UI library is worth it. | Beginner | 18 min |
+| [8. Conditional Rendering](/sdev-2150-intermediate-frontend/reactjs-guide/08-conditional-rendering/) | Show different UI for different situations with if, the ternary and &&, then filter lists and handle empty states. | Beginner | 17 min |
+| [9. Effects and Fetching Data](/sdev-2150-intermediate-frontend/reactjs-guide/09-effects-and-fetching-data/) | Use useEffect to synchronise with the outside world: load data with fetch, clean up after yourself, and handle loading and errors. | Intermediate | 20 min |
+| [10. useRef and useContext](/sdev-2150-intermediate-frontend/reactjs-guide/10-useref-and-usecontext/) | Reach DOM elements and keep values between renders with useRef, and share data across the tree without prop drilling using context. | Intermediate | 18 min |
+| [11. useReducer and Custom Hooks](/sdev-2150-intermediate-frontend/reactjs-guide/11-usereducer-and-custom-hooks/) | Organise complex state with a reducer, then package reusable logic into your own hooks. | Intermediate | 22 min |
+| [12. Performance: useMemo, useCallback and memo](/sdev-2150-intermediate-frontend/reactjs-guide/12-performance-usememo-usecallback-and-memo/) | See why components re-render, skip unnecessary work with memo, useCallback and useMemo, and learn when not to bother. | Intermediate | 20 min |
+| [13. Routing with React Router](/sdev-2150-intermediate-frontend/reactjs-guide/13-routing-with-react-router/) | Turn Filmshelf into a multi-page app with React Router: routes, layouts, links, URL parameters and query strings. | Intermediate | 24 min |
+| [14. Axios, TanStack Query and React Hook Form](/sdev-2150-intermediate-frontend/reactjs-guide/14-axios-tanstack-query-and-react-hook-form/) | Replace hand-written data fetching with Axios and TanStack Query, and replace hand-written form state with React Hook Form. | Intermediate | 28 min |
+| [15. State Management with Redux Toolkit](/sdev-2150-intermediate-frontend/reactjs-guide/15-state-management-with-redux-toolkit/) | Decide when you need a state library, build a Redux Toolkit store for the favorites, and compare Redux with Zustand, Jotai, MobX and the other tools on the roadmap. | Advanced | 26 min |
+| [16. Testing React Applications](/sdev-2150-intermediate-frontend/reactjs-guide/16-testing-react-applications/) | Write automated tests with Vitest and React Testing Library: functions, components, hooks, routing, mocked network requests and coverage. | Advanced | 30 min |
+| [17. Building and Deploying](/sdev-2150-intermediate-frontend/reactjs-guide/17-building-and-deploying/) | Build Filmshelf for production, fix single-page-app routing on static hosts, and deploy to GitHub Pages with a workflow that tests first. | Advanced | 24 min |
+| [18. What to Learn Next and Project Ideas](/sdev-2150-intermediate-frontend/reactjs-guide/18-what-to-learn-next-and-project-ideas/) | Review what Filmshelf covers, meet the tools the roadmap leaves for later, and pick projects that turn the guide into portfolio pieces. | Intermediate | 16 min |
+
+The lessons add up to roughly six hours of reading, plus the time you spend typing the code and doing the exercises.
+
+## Versions used
+
+The guide was written in October 2026 against these releases. If a newer major version appears, check its release notes before upgrading.
+
+| Tool | Version |
+| ---- | ------- |
+| React and React DOM | 19.2 |
+| Vite | 8.3 |
+| React Router | 8.4 (`react-router`) |
+| TanStack Query | 5.104 |
+| React Hook Form | 7.89 |
+| Redux Toolkit and React Redux | 2.13 and 9.3 |
+| Axios | 1.20 |
+| Vitest | 5.0 |
+| React Testing Library | 16.3 |
+
+<Aside type="note" title="Credit">
+The roadmap, topic list and project ideas come from the ReactJS Guide by JSMastery. Visit [jsmastery.com](https://jsmastery.com/) for their courses.
+</Aside>
+
+<LinkButton href="/resources/reactjs-guide/" variant="secondary" icon="document">
+  Read the original ReactJS Guide
+</LinkButton>

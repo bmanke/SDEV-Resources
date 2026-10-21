@@ -1,0 +1,202 @@
+---
+title: "8. Exceptions and Debugging"
+description: "Read error messages, handle failures with try/except, and track down bugs with breakpoints."
+difficulty: intermediate
+readingTime: 15
+tags: [python, exceptions, debugging]
+sidebar:
+  order: 8
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Your code will break. That is normal, and the skill is not avoiding errors but **reading them, handling them and
+fixing them quickly**.
+
+## Reading a traceback
+
+When Python crashes it prints a **traceback**. Read it from the bottom up.
+
+```text
+Traceback (most recent call last):
+  File "average.py", line 9, in <module>
+    print(average([]))
+  File "average.py", line 5, in average
+    return sum(numbers) / len(numbers)
+ZeroDivisionError: division by zero
+```
+
+1. The last line is the **type** of error and a short message.
+2. The line above it is **where** it happened (file and line number).
+3. Lines further up show the chain of calls that led there.
+
+## Errors you will meet
+
+| Error | Typical cause |
+| ----- | ------------- |
+| `SyntaxError` | Missing colon, bracket or quote. Python cannot even read the file. |
+| `IndentationError` | Inconsistent indentation. |
+| `NameError` | Using a variable that does not exist (often a typo). |
+| `TypeError` | Wrong type for an operation, such as `"a" + 1`. |
+| `ValueError` | Right type but a bad value, such as `int("abc")`. |
+| `IndexError` | List position that does not exist. |
+| `KeyError` | Dictionary key that does not exist. |
+| `ZeroDivisionError` | Dividing by zero. |
+| `FileNotFoundError` | Opening a file that is not there. |
+
+## try and except
+
+Wrap code that might fail in `try`. If an error occurs, Python jumps to a matching `except` instead of crashing.
+
+```python
+try:
+    age = int(input("Age: "))
+    print(f"In ten years you will be {age + 10}.")
+except ValueError:
+    print("Please type a whole number.")
+```
+
+Guidelines:
+
+- Catch **specific** exceptions (`ValueError`), not everything. A bare `except:` hides real bugs.
+- Keep the `try` block small. Only wrap the line(s) that can fail.
+- You can catch several types: `except (ValueError, TypeError):` or use separate `except` blocks.
+
+### else and finally
+
+```python
+try:
+    number = int(input("Number: "))
+except ValueError:
+    print("Not a number.")
+else:
+    print("You typed", number)    # runs only if there was NO error
+finally:
+    print("Goodbye.")             # always runs, error or not
+```
+
+### Asking again until it works
+
+Combine `try/except` with a loop for robust input.
+
+```python title="safe_input.py"
+def ask_for_int(prompt, minimum, maximum):
+    """Keep asking until the user enters a whole number in range."""
+    while True:
+        try:
+            value = int(input(prompt))
+        except ValueError:
+            print("That is not a whole number.")
+            continue
+        if minimum <= value <= maximum:
+            return value
+        print(f"Please enter a number from {minimum} to {maximum}.")
+
+guess = ask_for_int("Pick 1-10: ", 1, 10)
+print("You picked", guess)
+```
+
+### Raising your own errors
+
+```python
+def set_discount(percent):
+    if not 0 <= percent <= 100:
+        raise ValueError("percent must be between 0 and 100")
+    return percent / 100
+
+try:
+    set_discount(150)
+except ValueError as error:          # `as` gives you the error object
+    print("Problem:", error)
+```
+
+## Debugging strategies
+
+A bug means the program does something other than what you expected. Work like a detective.
+
+1. **Reproduce it.** Find the exact input that causes the problem.
+2. **Read the error** (if any) and go to the line it names.
+3. **Check your assumptions.** Print the variables just before the failing line.
+4. **Narrow it down.** Comment out or test half the code at a time.
+5. **Explain it out loud.** Describing the code line by line to a rubber duck, or a friend, surfaces mistakes surprisingly often.
+6. **Change one thing at a time** and re-run.
+
+### Print debugging
+
+```python
+def total_price(prices, tax):
+    print("DEBUG prices:", prices, "tax:", tax)     # remove when finished
+    subtotal = sum(prices)
+    print("DEBUG subtotal:", subtotal)
+    return subtotal * (1 + tax)
+```
+
+### Using the debugger
+
+Adding `breakpoint()` pauses the program at that line and opens an interactive prompt (Python's built-in `pdb`).
+Editors such as VS Code also let you click beside a line number to set a breakpoint and press F5 to run with the debugger.
+
+```python title="buggy_average.py"
+def average(numbers):
+    total = 0
+    for n in numbers:
+        total += n
+    breakpoint()                  # execution stops here
+    return total / len(numbers)
+
+print(average([4, 8, 15]))
+```
+
+Common debugger commands:
+
+| Command | What it does |
+| ------- | ------------ |
+| `n` (next) | Run the next line |
+| `s` (step) | Step into a function call |
+| `c` (continue) | Run until the next breakpoint |
+| `l` (list) | Show the surrounding code |
+| `pp expression` | Pretty-print a value |
+| `q` | Quit the debugger |
+
+You can also type a variable name to see its value, for example `total`.
+
+<Aside type="tip" title="Logic bugs are the hardest">
+Syntax errors are easy because Python points straight at them. Logic bugs (no error, wrong answer) need you to compare what the code actually does with what you intended. This is exactly what a debugger is for.
+</Aside>
+
+## Check yourself
+
+1. Write `safe_divide(a, b)` that returns `None` instead of crashing when `b` is zero.
+2. Ask for a number from 1 to 100 until the user gives a valid one, handling both text and out-of-range values.
+3. This program should print the largest number, but prints `0`. Find the bug without running it:
+
+   ```python
+   numbers = [3, 9, 4]
+   largest = 0
+   for n in numbers:
+       if n > largest:
+           largest = n
+   largest = 0
+   print(largest)
+   ```
+
+<details>
+<summary>Solutions</summary>
+
+```python
+# 1
+def safe_divide(a, b):
+    try:
+        return a / b
+    except ZeroDivisionError:
+        return None
+
+# 2: reuse ask_for_int from above
+value = ask_for_int("Number 1-100: ", 1, 100)
+
+# 3: `largest = 0` is repeated after the loop and wipes out the answer.
+#    Delete the second assignment. (Also note: starting at 0 fails for
+#    lists of only negative numbers. Start with largest = numbers[0] instead.)
+```
+
+</details>

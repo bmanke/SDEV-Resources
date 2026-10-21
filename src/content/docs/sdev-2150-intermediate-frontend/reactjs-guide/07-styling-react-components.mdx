@@ -1,0 +1,353 @@
+---
+title: "7. Styling React Components"
+description: "Style components with inline styles, plain CSS, CSS Modules, Tailwind CSS and Sass, and know when a UI library is worth it."
+difficulty: beginner
+readingTime: 18
+tags: [react, css, css-modules, tailwind, sass, ui-libraries]
+sidebar:
+  order: 7
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+React does not have one official way to style components. You choose from several approaches, and most real projects mix two or three. This lesson covers the options on the roadmap, in the order you will probably reach for them.
+
+| Approach | Best for | Watch out for |
+| -------- | -------- | ------------- |
+| Inline styles | A value that is calculated at runtime | No hover states, media queries or reuse |
+| Plain CSS | Global rules, variables, page layout | Class names are global, so they can collide |
+| CSS Modules | Styles that belong to one component | Needs the `.module.css` naming |
+| Tailwind CSS | Building quickly with utility classes | Long class lists in the markup |
+| Sass (optional) | Variables, nesting and mixins in CSS files | Plain CSS now covers much of it |
+| UI libraries | Ready-made, accessible components | A large dependency and a recognisable look |
+
+## 1. Inline styles
+
+The `style` attribute takes an **object** with camelCase property names. Use it when the value depends on data.
+
+```jsx
+function ratingColor(rating) {
+  if (rating >= 8) return '#15803d';
+  if (rating >= 7) return '#a16207';
+  return '#b91c1c';
+}
+
+<span style={{ color: ratingColor(rating), fontWeight: 600 }}>Rating {rating}</span>
+```
+
+Numbers become pixels (`padding: 8` means `8px`), and every other value is a string. Inline styles cannot express `:hover`, media queries or animations, so keep them for the occasional dynamic value.
+
+## 2. Plain CSS
+
+Create a CSS file and import it once. Vite adds it to the page and reloads it as you type. `src/index.css` is already imported in `main.jsx`, so it is the right place for global styles: colours as **CSS variables**, base typography and the page layout.
+
+```css title="src/index.css"
+:root {
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --text: #1c1c1a;
+  --muted: #6b6b66;
+  --accent: #01696f;
+  --border: #dcdcd6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+a {
+  color: var(--accent);
+}
+
+button {
+  font: inherit;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.header h1,
+.header p {
+  margin: 0;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 14rem 1fr;
+  gap: 1.5rem;
+  padding: 1.5rem 2rem;
+}
+
+.sidebar ul {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0;
+  list-style: none;
+}
+
+.search-bar,
+.add-movie {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 24rem;
+  margin-bottom: 1rem;
+}
+
+.movie-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+@media (max-width: 40rem) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+```
+
+The classes match the `className` values you have been writing since Lesson 3 (`header`, `layout`, `sidebar`, `search-bar`, `movie-list`). Using CSS variables now means a dark theme in Lesson 10 only has to change a few values.
+
+The weakness of plain CSS is that class names are global. A `.card` rule in one file also affects every other `.card` in the app. For component-specific styles, use CSS Modules.
+
+## 3. CSS Modules
+
+A file named `Something.module.css` is processed so that every class name is made unique. You import the file as an object and look up the generated names.
+
+```css title="src/components/MovieCard.module.css"
+.card {
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.title {
+  margin: 0 0 0.25rem;
+}
+
+.meta {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+}
+
+.button {
+  margin: 0 0.25rem 0.25rem 0;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.active {
+  background: var(--accent);
+  color: white;
+}
+```
+
+```jsx title="src/components/MovieCard.jsx"
+import styles from './MovieCard.module.css';
+
+function ratingColor(rating) {
+  if (rating >= 8) return '#15803d';
+  if (rating >= 7) return '#a16207';
+  return '#b91c1c';
+}
+
+export default function MovieCard({
+  id,
+  title,
+  year,
+  genre = 'Unknown',
+  rating,
+  isFavorite,
+  onToggleFavorite,
+}) {
+  return (
+    <article className={styles.card}>
+      <h3 className={styles.title}>{title}</h3>
+      <p className={styles.meta}>
+        {year} · {genre} ·{' '}
+        <span style={{ color: ratingColor(rating), fontWeight: 600 }}>Rating {rating}</span>
+      </p>
+      <button
+        type="button"
+        className={isFavorite ? `${styles.button} ${styles.active}` : styles.button}
+        aria-pressed={isFavorite}
+        onClick={() => onToggleFavorite(id)}
+      >
+        {isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+      </button>
+    </article>
+  );
+}
+```
+
+In the browser, `styles.card` becomes something like `_card_1x2y3`, so it cannot clash with a `.card` anywhere else. Notice how the three styling methods work together: the module handles the fixed look, a template string combines classes conditionally, and an inline style handles the calculated colour.
+
+Use a module for each component that has its own look, and keep the global file for variables and layout.
+
+## 4. Tailwind CSS
+
+Tailwind gives you small single-purpose classes (`p-4`, `rounded-lg`, `text-gray-500`) that you combine in the markup instead of writing CSS files. Tailwind v4 works with Vite through its own plugin.
+
+```sh
+npm install tailwindcss @tailwindcss/vite
+```
+
+```js title="vite.config.js"
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+});
+```
+
+```css title="src/index.css"
+@import 'tailwindcss';
+```
+
+The same card written with utilities:
+
+```jsx
+<article className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:shadow-md">
+  <h3 className="mb-1 text-lg font-semibold">{title}</h3>
+  <p className="mb-3 text-sm text-gray-500">
+    {year} · {genre}
+  </p>
+  <button
+    type="button"
+    className={`rounded-md border px-3 py-1 ${
+      isFavorite ? 'border-teal-700 bg-teal-700 text-white' : 'border-teal-700 text-teal-700'
+    }`}
+  >
+    Favorite
+  </button>
+</article>
+```
+
+Tailwind only generates the classes it finds in your files, so the final CSS stays small. It also provides hover, focus and responsive variants (`hover:`, `md:`) that inline styles cannot. The price is longer class strings, which you manage by extracting components. Filmshelf keeps CSS Modules, but the Tailwind route is equally valid.
+
+<Aside type="caution" title="Build class names in full">
+Tailwind finds classes by scanning your source for complete strings. `` className={`bg-${color}-500`} `` produces a class it cannot detect. Write whole class names such as `'bg-teal-500'` and choose between them in code.
+</Aside>
+
+## 5. Sass (optional)
+
+Sass adds variables, nesting and mixins to CSS. Vite needs no configuration. Install the compiler and use a `.scss` extension.
+
+```sh
+npm install -D sass
+```
+
+```scss title="src/components/Panel.scss"
+$gap: 1rem;
+
+.panel {
+  display: grid;
+  gap: $gap;
+
+  h2 {
+    margin: 0;
+  }
+
+  &:hover {
+    border-color: var(--accent);
+  }
+}
+```
+
+```jsx
+import './Panel.scss';
+```
+
+Modern CSS now has variables and nesting built in, so you can skip Sass unless a project already uses it.
+
+## UI component libraries
+
+If you would rather not build buttons, dialogs and menus from scratch, UI libraries provide finished, accessible components with themes.
+
+| Library | Notes |
+| ------- | ----- |
+| [Material UI](https://mui.com) | Google's Material Design components, very widely used |
+| [Ant Design](https://ant.design) | Large set of enterprise-style components, strong tables and forms |
+| [Chakra UI](https://chakra-ui.com) | Accessible components with a simple styling API |
+| [React Bootstrap](https://react-bootstrap.github.io) | Bootstrap's components rebuilt for React |
+| [Blueprint](https://blueprintjs.com) | Dense, desktop-style components for data-heavy interfaces |
+| Rebass | The latest npm release is from October 2019, so do not start a new project with it |
+| Semantic UI React | The latest npm release is from December 2023, and updates are slow |
+
+Release dates were checked on npm in October 2026. Always look at a library's recent releases and open issues before you adopt it.
+
+Using one is straightforward. With Material UI, for example:
+
+```sh
+npm install @mui/material @emotion/react @emotion/styled
+```
+
+```jsx
+import Button from '@mui/material/Button';
+import Stack from '@mui/material/Stack';
+
+export default function Actions() {
+  return (
+    <Stack direction="row" spacing={1}>
+      <Button variant="contained">Save</Button>
+      <Button variant="outlined">Cancel</Button>
+    </Stack>
+  );
+}
+```
+
+### What about CSS-in-JS?
+
+Libraries such as styled-components let you write CSS inside JavaScript. The styled-components maintainer [announced maintenance mode in March 2025](https://www.sanity.io/engineering/cut-styled-components-into-pieces-this-is-our-last-resort), and many teams have moved to CSS Modules or Tailwind. You will still meet it in existing projects, and the idea is simple: a tagged template creates a component with its styles attached.
+
+## Choosing an approach
+
+- Start with **CSS Modules plus a small global file** for projects you control.
+- Pick **Tailwind** if you like working directly in the markup, or your team already uses it.
+- Reach for a **UI library** when you need many complex components quickly, such as an admin dashboard.
+- Use **inline styles** only for values that are calculated at runtime.
+
+Whatever you choose, make sure text has enough contrast with its background, and that interactive elements show a visible focus style.
+
+## Check yourself
+
+1. Why does a CSS Module class name not clash with the same name in another file?
+2. Write `className` for a button that always has `styles.button`, and also has `styles.active` when `isActive` is true.
+3. Write an inline style that makes a `div` 200 pixels wide with a `1.5rem` margin.
+4. Why will `` className={`text-${size}`} `` not work with Tailwind?
+
+<details>
+<summary>Answers</summary>
+
+1. The build tool rewrites each class name in a `.module.css` file to a unique name and gives your code the mapping, so `styles.card` in two different modules become two different real class names.
+2. ```jsx
+   className={isActive ? `${styles.button} ${styles.active}` : styles.button}
+   ```
+3. ```jsx
+   <div style={{ width: 200, margin: '1.5rem' }} />
+   ```
+4. Tailwind scans the source for complete class names. A class assembled from pieces, such as `text-lg` built from `text-` and `lg`, never appears in the source, so it is not generated. Write the full names, for example `size === 'lg' ? 'text-lg' : 'text-base'`.
+
+</details>

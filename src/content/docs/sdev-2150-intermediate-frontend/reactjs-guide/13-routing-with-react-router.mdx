@@ -1,0 +1,360 @@
+---
+title: "13. Routing with React Router"
+description: "Turn Filmshelf into a multi-page app with React Router: routes, layouts, links, URL parameters and query strings."
+difficulty: intermediate
+readingTime: 24
+tags: [react, react-router, routing, spa]
+sidebar:
+  order: 13
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+A React app is a **single-page application** (SPA): the browser loads one HTML page, and JavaScript changes what is shown. But users still expect different URLs for different screens, a working back button, and links they can share. A **router** connects the URL to your components.
+
+**React Router** is the most popular routing library for React. Version 8 shipped in June 2026. It requires React 19.2.7 or newer and Node 22.22 or newer, and everything now comes from one package, `react-router`. The older `react-router-dom` package no longer exists in v8. If you follow an older tutorial that imports from `react-router-dom`, change the import to `react-router`.
+
+React Router can be used in three ways. This lesson uses the simplest, **declarative mode**, where you describe routes with components.
+
+| Mode | What it is |
+| ---- | ---------- |
+| Declarative | `BrowserRouter`, `Routes` and `Route` components. Best for learning and for apps that fetch their own data |
+| Data | `createBrowserRouter` and `RouterProvider`, with loaders and actions attached to routes |
+| Framework | A Vite plugin that adds file-based routes and server rendering, making React Router a full framework |
+
+```sh
+npm install react-router
+```
+
+## What you will build
+
+Filmshelf gets three pages:
+
+| URL | Page |
+| --- | ---- |
+| `/` | The movie list (the home page), with the genre filter stored in the URL |
+| `/movies/7` | A detail page for one movie |
+| anything else | A "page not found" page |
+
+## Step 1: turn on the router
+
+Wrap the app in `BrowserRouter`. It listens to the browser's address bar and tells every component below it which URL is current.
+
+```jsx title="src/main.jsx"
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router';
+import './index.css';
+import App from './App.jsx';
+import ThemeProvider from './context/ThemeProvider.jsx';
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
+    </BrowserRouter>
+  </StrictMode>,
+);
+```
+
+`basename` tells the router that the app does not live at the root of the domain. It is `/` while developing, and it will be `/SDEV-Resources/` or similar when you deploy to a GitHub Pages project page (Lesson 17). Setting it now means you will not have to touch the routes later.
+
+## Step 2: describe the routes
+
+`App` now only decides which page to show for which URL.
+
+```jsx title="src/App.jsx"
+import { Route, Routes } from 'react-router';
+import Layout from './components/Layout.jsx';
+import HomePage from './pages/HomePage.jsx';
+import MovieDetailPage from './pages/MovieDetailPage.jsx';
+import NotFoundPage from './pages/NotFoundPage.jsx';
+
+export default function App() {
+  return (
+    <Routes>
+      <Route element={<Layout />}>
+        <Route index element={<HomePage />} />
+        <Route path="movies/:id" element={<MovieDetailPage />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Route>
+    </Routes>
+  );
+}
+```
+
+- **`<Routes>`** looks at the current URL and renders the best matching `<Route>`.
+- **`index`** marks the route that renders at the parent's own path (`/`).
+- **`path="movies/:id"`** has a **dynamic segment**. `:id` matches anything, such as `/movies/7`, and the matched value is available to the page.
+- **`path="*"`** matches everything else, which makes it the not-found page. The router always picks the most specific match, so the order of routes does not matter.
+- A `<Route>` with an `element` but **no `path`** is a **layout route**. It renders its `element` for all of its children.
+
+## Step 3: a layout with an outlet
+
+`Layout` holds what every page shares. `<Outlet />` is the placeholder where the matching child route appears.
+
+```jsx title="src/components/Layout.jsx"
+import { Outlet } from 'react-router';
+import Header from './Header.jsx';
+import useMovies from '../hooks/useMovies.js';
+
+export default function Layout() {
+  const moviesState = useMovies();
+
+  return (
+    <>
+      <Header />
+      <Outlet context={moviesState} />
+    </>
+  );
+}
+```
+
+The movies are loaded once in the layout and handed to whichever page is showing through `context`. The pages read them with `useOutletContext()`. That keeps the data alive while the user moves between pages. Lesson 14 replaces this with a cache that every page can read directly.
+
+## Step 4: links
+
+Use `Link` instead of `<a>` for internal navigation. A plain `<a href>` makes the browser reload the whole page and throw away React's state. `Link` changes the URL and renders the new route instantly.
+
+`NavLink` is a `Link` that knows whether it points at the current page. It adds an `active` class and an `aria-current="page"` attribute, which you can style.
+
+```jsx title="src/components/Header.jsx"
+import { NavLink } from 'react-router';
+import { useTheme } from '../context/ThemeContext.js';
+
+export default function Header() {
+  const { theme, toggleTheme } = useTheme();
+
+  return (
+    <header className="header">
+      <h1>Filmshelf</h1>
+      <p>Your personal movie tracker</p>
+      <nav aria-label="Main">
+        <NavLink to="/" end>
+          Home
+        </NavLink>
+      </nav>
+      <button type="button" onClick={toggleTheme}>
+        {theme === 'light' ? 'Dark mode' : 'Light mode'}
+      </button>
+    </header>
+  );
+}
+```
+
+The `end` prop stops the Home link from counting as active on every page, because every URL starts with `/`.
+
+Make each card's title a link to its detail page:
+
+```jsx title="src/components/MovieCard.jsx (changes)"
+import { memo } from 'react';
+import { Link } from 'react-router';
+import styles from './MovieCard.module.css';
+
+// ...inside the component's JSX, replace the title text with a link:
+<h3 className={styles.title}>
+  <Link to={`/movies/${id}`}>{title}</Link>
+  {year >= 2023 && <span className={styles.badge}>New</span>}
+</h3>
+```
+
+## Step 5: the home page
+
+Everything that used to be in `App` (except the header) moves into `HomePage`. There is one change: instead of `useState`, the selected genre is read from the URL with `useSearchParams`.
+
+```jsx title="src/pages/HomePage.jsx"
+import { useCallback, useMemo, useState } from 'react';
+import { useOutletContext, useSearchParams } from 'react-router';
+import Sidebar from '../components/Sidebar.jsx';
+import SearchBar from '../components/SearchBar.jsx';
+import Panel from '../components/Panel.jsx';
+import MovieList from '../components/MovieList.jsx';
+import AddMovieForm from '../components/AddMovieForm.jsx';
+import useLocalStorage from '../hooks/useLocalStorage.js';
+import useDebounce from '../hooks/useDebounce.js';
+
+export default function HomePage() {
+  const { movies, status, error, addMovie, removeMovie } = useOutletContext();
+  const [favoriteIds, setFavoriteIds] = useLocalStorage('filmshelf:favorites', []);
+  const [query, setQuery] = useState('');
+  const debouncedQuery = useDebounce(query, 250);
+
+  // The selected genre lives in the URL, for example /?genre=Drama
+  const [searchParams, setSearchParams] = useSearchParams();
+  const genre = searchParams.get('genre') ?? 'All';
+  const setGenre = useCallback(
+    (next) => setSearchParams(next === 'All' ? {} : { genre: next }),
+    [setSearchParams],
+  );
+
+  const visibleMovies = useMemo(() => {
+    const needle = debouncedQuery.trim().toLowerCase();
+    return movies.filter(
+      (movie) =>
+        (genre === 'All' || movie.genre === genre) && movie.title.toLowerCase().includes(needle),
+    );
+  }, [movies, genre, debouncedQuery]);
+  const isFiltering = query !== '' || genre !== 'All';
+
+  const toggleFavorite = useCallback(
+    (id) => {
+      setFavoriteIds((ids) =>
+        ids.includes(id) ? ids.filter((existing) => existing !== id) : [...ids, id],
+      );
+    },
+    [setFavoriteIds],
+  );
+
+  const handleRemove = useCallback(
+    (id) => {
+      removeMovie(id);
+      setFavoriteIds((ids) => ids.filter((existing) => existing !== id));
+    },
+    [removeMovie, setFavoriteIds],
+  );
+
+  function clearFilters() {
+    setQuery('');
+    setGenre('All');
+  }
+
+  let content;
+  if (status === 'loading') {
+    content = <p>Loading movies...</p>;
+  } else if (status === 'error') {
+    content = <p role="alert">Could not load movies: {error}</p>;
+  } else {
+    content = (
+      <MovieList
+        movies={visibleMovies}
+        favoriteIds={favoriteIds}
+        onToggleFavorite={toggleFavorite}
+        onRemove={handleRemove}
+      />
+    );
+  }
+
+  return (
+    <div className="layout">
+      <Sidebar selectedGenre={genre} onSelectGenre={setGenre} />
+      <main>
+        <SearchBar value={query} onChange={setQuery} />
+        <Panel title={genre === 'All' ? 'All movies' : genre}>
+          {favoriteIds.length > 0 ? (
+            <p>Favorites: {favoriteIds.length}</p>
+          ) : (
+            <p>No favorites yet. Add one with the button on a card.</p>
+          )}
+          {isFiltering && (
+            <button type="button" onClick={clearFilters}>
+              Clear filters
+            </button>
+          )}
+          {content}
+        </Panel>
+        <AddMovieForm onAdd={addMovie} />
+      </main>
+    </div>
+  );
+}
+```
+
+### Why put the filter in the URL?
+
+`useSearchParams` works like `useState`, but the value is stored in the query string (`?genre=Drama`). That brings real benefits for free: the back button steps through filters, a refresh keeps the filter, and a user can bookmark or share a filtered list. Use it for state that describes **what the user is looking at** (filters, sort order, page number). Use `useState` for things like whether a menu is open.
+
+## Step 6: the detail page
+
+```jsx title="src/pages/MovieDetailPage.jsx"
+import { Link, useNavigate, useOutletContext, useParams } from 'react-router';
+import NotFoundPage from './NotFoundPage.jsx';
+
+export default function MovieDetailPage() {
+  const { id } = useParams(); // always a string, so convert before comparing
+  const { movies, status } = useOutletContext();
+  const navigate = useNavigate();
+
+  if (status === 'loading') return <p>Loading movie...</p>;
+
+  const movie = movies.find((item) => item.id === Number(id));
+  if (!movie) return <NotFoundPage />;
+
+  return (
+    <main className="detail">
+      <h2>{movie.title}</h2>
+      <dl>
+        <dt>Year</dt>
+        <dd>{movie.year}</dd>
+        <dt>Genre</dt>
+        <dd>{movie.genre}</dd>
+        <dt>Rating</dt>
+        <dd>{movie.rating}</dd>
+      </dl>
+      <button type="button" onClick={() => navigate(-1)}>
+        Go back
+      </button>{' '}
+      <Link to="/">All movies</Link>
+    </main>
+  );
+}
+```
+
+- **`useParams()`** returns the dynamic parts of the URL. The values are **strings**, so `'7'` is not equal to `7`. Convert with `Number(id)`.
+- **`useNavigate()`** returns a function for navigating from code, for example after a form is submitted. `navigate('/')` goes to a path, and `navigate(-1)` goes back one step in history.
+- A movie that does not exist (`/movies/999`) shows the not-found page instead of crashing.
+- Notice the `Loading movie...` branch. If someone opens `/movies/3` directly, the movie list has not loaded yet, and the page must handle that.
+
+```jsx title="src/pages/NotFoundPage.jsx"
+import { Link } from 'react-router';
+
+export default function NotFoundPage() {
+  return (
+    <main>
+      <h2>Page not found</h2>
+      <p>That page does not exist.</p>
+      <Link to="/">Back to all movies</Link>
+    </main>
+  );
+}
+```
+
+## Redirects
+
+Render `<Navigate>` to send the user somewhere else. `replace` swaps the current history entry instead of adding one, so the back button does not return to the redirecting page.
+
+```jsx
+import { Navigate } from 'react-router';
+
+<Route path="films" element={<Navigate to="/" replace />} />
+```
+
+## Try it
+
+1. Run `npm run dev` and click a movie title. The URL changes to `/movies/7` and the page does not reload.
+2. Press the browser's back button. You return to the list.
+3. Select a genre. The address bar changes to `/?genre=Drama`. Refresh, and the genre stays selected.
+4. Type `/nonsense` after the address. The not-found page appears.
+5. Paste `/movies/3` into a new tab. The detail page loads straight away. The dev server answers every path with `index.html`, and React Router does the rest. Production hosts need extra setup for this, which Lesson 17 covers.
+
+<Aside type="note" title="Data mode and loaders">
+In data mode you attach a `loader` function to a route so the data is fetched **before** the page renders, and an `action` for form submissions. That is a good fit when a router should own data loading. In this guide, TanStack Query (Lesson 14) fills that role. Read the [React Router docs](https://reactrouter.com) when you are ready to compare them.
+</Aside>
+
+## Check yourself
+
+1. Add an "About" page at `/about` with a link to it in the header.
+2. What is the difference between `Link` and `NavLink`?
+3. A user opens `/movies/abc`. What does `Number(id)` return, and what does the page show?
+4. Why does the home link use `end`?
+
+<details>
+<summary>Answers</summary>
+
+1. Create `src/pages/AboutPage.jsx` that returns `<main><h2>About</h2></main>`, add `<Route path="about" element={<AboutPage />} />` inside the layout route, and add `<NavLink to="/about">About</NavLink>` to the header nav.
+2. `NavLink` adds an `active` class and `aria-current="page"` when its target matches the current URL, so you can style the current page. `Link` has no active state.
+3. `Number('abc')` is `NaN`, no movie has that id, so `movies.find` returns `undefined` and the page renders `NotFoundPage`.
+4. Without `end`, a link to `/` matches every URL that starts with `/`, so it would be marked active on every page.
+
+</details>

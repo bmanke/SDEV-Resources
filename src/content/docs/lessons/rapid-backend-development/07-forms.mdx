@@ -1,0 +1,351 @@
+---
+title: "7. Forms, Validation and Sanitization"
+description: "Accept user input safely with Django forms and ModelForms: rendering, validation, cleaning, CSRF protection and the post/redirect/get pattern."
+difficulty: intermediate
+readingTime: 18
+tags: [django, forms, validation, security]
+sidebar:
+  order: 7
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Anything a user sends is **untrusted**. A Django form class describes the fields you expect, renders the HTML for them,
+checks the submitted data against your rules and gives you clean Python values.
+
+## Form or ModelForm?
+
+| Type | Use when |
+| ---- | -------- |
+| `forms.Form` | The form is not tied to a database table (search, contact, login) |
+| `forms.ModelForm` | The form creates or edits a model instance. Fields and validation come from the model. |
+
+A `ModelForm` for adding and editing books:
+
+```python title="books/forms.py"
+from datetime import date
+
+from django import forms
+from django.core.exceptions import ValidationError
+
+from .models import Book
+
+
+class BookForm(forms.ModelForm):
+    class Meta:
+        model = Book
+        fields = ["title", "author", "genres", "published_year", "pages", "summary"]
+        widgets = {
+            "summary": forms.Textarea(attrs={"rows": 4}),
+            "genres": forms.CheckboxSelectMultiple,
+        }
+        help_texts = {"pages": "Total printed pages."}
+
+    # Field-level validation: a method named clean_<fieldname>
+    def clean_title(self):
+        title = self.cleaned_data["title"].strip()          # sanitization: trim whitespace
+        if title.isdigit():
+            raise ValidationError("A title cannot be only numbers.")
+        return title                                         # always return the cleaned value
+
+    def clean_published_year(self):
+        year = self.cleaned_data["published_year"]
+        if not 1000 <= year <= date.today().year:
+            raise ValidationError(f"Enter a year between 1000 and {date.today().year}.")
+        return year
+
+    # Form-level validation: rules that involve several fields
+    def clean(self):
+        cleaned = super().clean()
+        title, author = cleaned.get("title"), cleaned.get("author")
+        if title and author:
+            duplicates = Book.objects.filter(title__iexact=title, author=author)
+            if self.instance.pk:                              # when editing, ignore the book itself
+                duplicates = duplicates.exclude(pk=self.instance.pk)
+            if duplicates.exists():
+                raise ValidationError("That author already has a book with this title.")
+        return cleaned
+```
+
+### What `is_valid()` does
+
+1. Converts each submitted string into the field's Python type (`"1965"` becomes `1965`).
+2. Runs the field's validators (required, max length, min value...).
+3. Calls `clean_<field>()` for each field.
+4. Calls `clean()` for cross-field rules.
+5. Collects errors into `form.errors`; valid data is in `form.cleaned_data`.
+
+**Sanitization** means cleaning input into a safe, consistent form (trimming spaces, normalizing case). **Validation** means rejecting input that is unacceptable. Django does both in the same pipeline.
+
+## The view: show, validate, save, redirect
+
+Every form view follows the same pattern, which is often called **post/redirect/get**:
+
+```python title="books/views.py"
+from django.contrib import messages
+from django.db.models import Avg, Count, Q
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
+
+from .forms import BookForm
+from .models import Book
+
+SORT_OPTIONS = {
+    "title": "title",
+    "newest": "-published_year",
+    "oldest": "published_year",
+    "longest": "-pages",
+}
+
+
+def home(request):
+    return render(request, "books/home.html", {"message": "Welcome to Book Club"})
+
+
+def book_list(request):
+    query = request.GET.get("q", "").strip()
+    sort = request.GET.get("sort", "title")
+
+    books = (
+        Book.objects.select_related("author")
+        .prefetch_related("genres")
+        .annotate(average_rating=Avg("reviews__rating"), review_count=Count("reviews"))
+    )
+    if query:
+        books = books.filter(Q(title__icontains=query) | Q(author__name__icontains=query))
+    books = books.order_by(SORT_OPTIONS.get(sort, "title"))
+
+    context = {"books": books, "query": query, "sort": sort}
+    return render(request, "books/book_list.html", context)
+
+
+def book_detail(request, book_id):
+    book = get_object_or_404(
+        Book.objects.select_related("author").prefetch_related("genres", "reviews__user"),
+        pk=book_id,
+    )
+    context = {"book": book, "average_rating": book.reviews.aggregate(avg=Avg("rating"))["avg"]}
+    return render(request, "books/book_detail.html", context)
+
+
+def book_create(request):
+    if request.method == "POST":
+        form = BookForm(request.POST)                      # bind the submitted data
+        if form.is_valid():
+            book = form.save()                             # INSERT, including the many-to-many links
+            messages.success(request, f"Added {book.title}.")
+            return redirect("books:book_detail", book_id=book.pk)   # redirect after a successful POST
+    else:
+        form = BookForm()                                  # an empty form for a GET
+    return render(request, "books/book_form.html", {"form": form, "heading": "Add a book"})
+
+
+def book_update(request, book_id):
+    book = get_object_or_404(Book, pk=book_id)
+    if request.method == "POST":
+        form = BookForm(request.POST, instance=book)       # instance= means "edit this row"
+        if form.is_valid():
+            form.save()                                    # UPDATE
+            messages.success(request, f"Updated {book.title}.")
+            return redirect("books:book_detail", book_id=book.pk)
+    else:
+        form = BookForm(instance=book)                     # pre-filled with current values
+    return render(request, "books/book_form.html", {"form": form, "heading": f"Edit {book.title}"})
+
+
+@require_POST
+def book_delete(request, book_id):
+    book = get_object_or_404(Book, pk=book_id)
+    book.delete()
+    messages.success(request, f"Deleted {book.title}.")
+    return redirect("books:book_list")
+```
+
+Why redirect after saving? If the success page were rendered directly from the POST, pressing refresh would resubmit the form and create a duplicate. A redirect turns the end of the flow into a harmless GET.
+
+Add the routes. Put `books/new/` before routes with a captured value:
+
+```python title="books/urls.py"
+from django.urls import path
+
+from . import views
+
+app_name = "books"
+
+urlpatterns = [
+    path("", views.home, name="home"),
+    path("books/", views.book_list, name="book_list"),
+    path("books/new/", views.book_create, name="book_create"),
+    path("books/<int:book_id>/", views.book_detail, name="book_detail"),
+    path("books/<int:book_id>/edit/", views.book_update, name="book_update"),
+    path("books/<int:book_id>/delete/", views.book_delete, name="book_delete"),
+]
+```
+
+## The template
+
+```jinja title="books/templates/books/book_form.html"
+{% extends "base.html" %}
+
+{% block title %}{{ heading }} | Book Club{% endblock %}
+
+{% block content %}
+  <h1>{{ heading }}</h1>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Save</button>
+    <a href="{% url 'books:book_list' %}">Cancel</a>
+  </form>
+{% endblock %}
+```
+
+- `{% csrf_token %}` is **mandatory** in every POST form. It adds a hidden token that proves the request came from your own page, which blocks cross-site request forgery. Without it, Django answers `403 Forbidden`.
+- `form.as_p` renders each field with its label, widget, help text and errors. For full control, loop manually:
+
+```jinja
+{% for field in form %}
+  <div class="field">
+    {{ field.label_tag }}
+    {{ field }}
+    {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+    {{ field.errors }}
+  </div>
+{% endfor %}
+{{ form.non_field_errors }}
+```
+
+Update `base.html` to show one-time **messages** and a link to add books:
+
+```jinja title="templates/base.html"
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Book Club{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/site.css' %}">
+</head>
+<body>
+  <header>
+    <a class="brand" href="{% url 'books:home' %}">Book Club</a>
+    <nav>
+      <a href="{% url 'books:book_list' %}">Books</a>
+      <a href="{% url 'books:book_create' %}">Add a book</a>
+    </nav>
+  </header>
+
+  <main>
+    {% if messages %}
+      <ul class="messages">
+        {% for message in messages %}
+          <li class="{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>Built with Django</footer>
+</body>
+</html>
+```
+
+Add a delete button to the detail page. It must be a POST form, never a link, because links can be followed accidentally by crawlers and prefetchers:
+
+```jinja title="books/templates/books/book_detail.html"
+{% extends "base.html" %}
+
+{% block title %}{{ book.title }} | Book Club{% endblock %}
+
+{% block content %}
+  <h1>{{ book.title }}</h1>
+  <p>
+    by {{ book.author.name }}, {{ book.published_year }} &middot; {{ book.pages }} pages
+  </p>
+  <p>
+    {% for genre in book.genres.all %}<span class="tag">{{ genre.name }}</span>{% endfor %}
+  </p>
+  {% if book.summary %}<p>{{ book.summary }}</p>{% endif %}
+
+  <p>
+    <a href="{% url 'books:book_update' book.id %}">Edit</a>
+    <form method="post" action="{% url 'books:book_delete' book.id %}" style="display:inline"
+          onsubmit="return confirm('Delete this book?')">
+      {% csrf_token %}
+      <button type="submit">Delete</button>
+    </form>
+  </p>
+
+  <h2>Reviews{% if average_rating %} ({{ average_rating|floatformat:1 }} / 5){% endif %}</h2>
+  {% for review in book.reviews.all %}
+    <article>
+      <strong>{{ review.user.username }}</strong> gave it {{ review.rating }} / 5
+      <p>{{ review.text }}</p>
+    </article>
+  {% empty %}
+    <p>No reviews yet.</p>
+  {% endfor %}
+
+  <p><a href="{% url 'books:book_list' %}">&larr; All books</a></p>
+{% endblock %}
+```
+
+## Plain forms
+
+For input that is not saved as a model, use `forms.Form` and read `cleaned_data` yourself:
+
+```python
+class RecommendationForm(forms.Form):
+    friend_email = forms.EmailField()
+    message = forms.CharField(widget=forms.Textarea, max_length=500, required=False)
+    send_copy = forms.BooleanField(required=False)
+
+# in a view
+form = RecommendationForm(request.POST)
+if form.is_valid():
+    email = form.cleaned_data["friend_email"]
+```
+
+## Form field reference
+
+| Field | Python value |
+| ----- | ------------ |
+| `CharField`, `EmailField`, `URLField`, `SlugField` | `str` |
+| `IntegerField`, `DecimalField`, `FloatField` | numbers |
+| `BooleanField` | `bool` (use `required=False` for optional checkboxes) |
+| `ChoiceField`, `MultipleChoiceField` | selected value(s) |
+| `DateField`, `DateTimeField` | `date`, `datetime` |
+| `ModelChoiceField`, `ModelMultipleChoiceField` | model instances |
+| `ImageField`, `FileField` | uploaded file |
+
+<Aside type="caution" title="Never trust the browser's checks">
+HTML attributes such as `required` and `maxlength` help users, but anyone can bypass them with developer tools or a script. Django's server-side validation is the real protection. Always call `is_valid()`.
+</Aside>
+
+## Check yourself
+
+1. Add a rule so a book cannot have fewer than 1 page. Where does the code go: `clean_pages` or `clean`?
+2. Why must `book_delete` accept only `POST`?
+3. What does `BookForm(request.POST, instance=book)` do differently from `BookForm(request.POST)`?
+
+<details>
+<summary>Answers</summary>
+
+1. In `clean_pages`, because it involves only that one field:
+
+```python
+def clean_pages(self):
+    pages = self.cleaned_data["pages"]
+    if pages < 1:
+        raise ValidationError("A book needs at least one page.")
+    return pages
+```
+
+2. Deleting changes data, and `GET` requests must be safe. A link or a web crawler could trigger a `GET` by accident. `POST` plus the CSRF token ensures the user deliberately submitted a form from your site.
+3. With `instance=book` the form edits that existing row (`save()` runs an `UPDATE`). Without it, `save()` creates a new row.
+
+</details>

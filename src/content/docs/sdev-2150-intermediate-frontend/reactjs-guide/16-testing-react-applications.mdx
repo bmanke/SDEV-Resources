@@ -1,0 +1,452 @@
+---
+title: "16. Testing React Applications"
+description: "Write automated tests with Vitest and React Testing Library: functions, components, hooks, routing, mocked network requests and coverage."
+difficulty: advanced
+readingTime: 30
+tags: [react, testing, vitest, react-testing-library, jest, playwright]
+sidebar:
+  order: 16
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Every change you make to an app risks breaking something somewhere else. Automated tests are small programs that use your code and check the result, so you find out in seconds instead of after a user reports a bug. They also let you refactor with confidence, because a green test run tells you the behaviour is unchanged.
+
+## The tools
+
+The roadmap leaves the testing section as logos, so here are the tools that matter, and what each one is for.
+
+| Tool | Role |
+| ---- | ---- |
+| [Vitest](https://vitest.dev) | The **test runner**: finds test files, runs them, reports results, mocks modules, measures coverage. Built for Vite projects and reuses your Vite config |
+| [Jest](https://jestjs.io) | The long-time standard runner, with almost the same API as Vitest. Very common in existing projects and in Create React App era tutorials |
+| [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/) | Renders components and finds elements the way a user would |
+| `user-event` | Simulates real user actions: typing, clicking, tabbing |
+| `jest-dom` | Extra assertions such as `toBeInTheDocument()` and `toHaveValue()` |
+| jsdom | A pretend browser that runs inside Node, so component tests do not need a real one |
+| [Playwright](https://playwright.dev) and [Cypress](https://www.cypress.io) | **End-to-end** tools that drive a real browser through your running app |
+| MSW (Mock Service Worker) | Intercepts network requests at the network level, so you can fake a whole API |
+
+A healthy test suite has many fast **unit tests** (a function, a reducer), a good number of **component and integration tests** (several components working together with a fake network), and a few **end-to-end tests** for the most important journeys. This lesson builds the first two layers with Vitest and React Testing Library.
+
+<Aside type="note" title="Test what the user sees">
+The main idea behind React Testing Library is that tests should look like use: find the button labelled "Add movie", click it, and check what appears on screen. Tests that dig into component internals (state values, function names) break whenever you refactor, even when nothing is wrong for the user.
+</Aside>
+
+## Setup
+
+```sh
+npm install -D vitest jsdom @testing-library/react @testing-library/dom @testing-library/jest-dom @testing-library/user-event @vitest/coverage-v8
+```
+
+React Testing Library needs `@testing-library/dom` as a separate install. Configure Vitest in the same file as Vite:
+
+```js title="vite.config.js"
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: 'jsdom',                // simulate a browser
+    globals: true,                       // use test, expect and vi without importing
+    setupFiles: './src/test/setup.js',   // runs before every test file
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{js,jsx}'],
+      exclude: ['src/main.jsx', 'src/test/**', '**/*.test.{js,jsx}'],
+    },
+  },
+});
+```
+
+```js title="src/test/setup.js"
+import '@testing-library/jest-dom/vitest';
+```
+
+With `globals: true`, Testing Library also cleans up after each test automatically. Without it, you would call `cleanup()` yourself.
+
+```json title="package.json (scripts)"
+"test": "vitest",
+"test:run": "vitest run",
+"coverage": "vitest run --coverage"
+```
+
+`npm test` starts Vitest in **watch mode**, re-running the affected tests each time you save. `npm run test:run` runs everything once, which is what a deployment pipeline uses.
+
+Tests live next to the code they test and are named `something.test.js` or `something.test.jsx`.
+
+## Anatomy of a test
+
+```js
+test('adds two numbers', () => {
+  // Arrange: set up
+  const a = 2;
+  const b = 3;
+
+  // Act: do the thing
+  const result = a + b;
+
+  // Assert: check the outcome
+  expect(result).toBe(5);
+});
+```
+
+`test(name, fn)` defines one test. `expect(value)` followed by a **matcher** (`toBe`, `toEqual`, `toHaveLength`, `toThrow`, ...) makes an assertion, and a test fails when an assertion fails or an error is thrown. Group related tests with `describe('name', () => { ... })`. Use `toBe` for primitives, and `toEqual` to compare objects and arrays by content.
+
+## 1. Testing plain functions: the reducer
+
+Pure functions are the easiest thing to test, which is another reason to keep logic out of components.
+
+```js title="src/store/favoritesSlice.test.js"
+import reducer, { cleared, removed, selectFavoriteIds, toggled } from './favoritesSlice.js';
+import { loadPreloadedState, makeStore } from './index.js';
+
+beforeEach(() => localStorage.clear());
+
+test('toggled adds then removes an id', () => {
+  let state = reducer(undefined, { type: 'init' });
+  expect(state).toEqual({ ids: [] });
+  state = reducer(state, toggled(3));
+  expect(state.ids).toEqual([3]);
+  state = reducer(state, toggled(3));
+  expect(state.ids).toEqual([]);
+});
+
+test('removed and cleared', () => {
+  const start = { ids: [1, 2, 3] };
+  expect(reducer(start, removed(2)).ids).toEqual([1, 3]);
+  expect(reducer(start, cleared()).ids).toEqual([]);
+  expect(start.ids).toEqual([1, 2, 3]); // the original state was not changed
+});
+
+test('the store dispatches, selects and persists', () => {
+  const store = makeStore();
+  store.dispatch(toggled(5));
+  store.dispatch(toggled(6));
+  expect(selectFavoriteIds(store.getState())).toEqual([5, 6]);
+  expect(JSON.parse(localStorage.getItem('filmshelf:favorites'))).toEqual([5, 6]);
+
+  const next = makeStore(loadPreloadedState());
+  expect(selectFavoriteIds(next.getState())).toEqual([5, 6]);
+});
+```
+
+`beforeEach` runs before every test in the file. Clearing `localStorage` here keeps tests independent, since a test that depends on another test's leftovers is a test that fails mysteriously. The other hooks are `afterEach`, `beforeAll` and `afterAll`.
+
+## 2. Testing a component
+
+```jsx title="src/components/MovieCard.test.jsx"
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router';
+import MovieCard from './MovieCard.jsx';
+
+const movie = { id: 7, title: 'Glass Garden', year: 2024, genre: 'Drama', rating: 8.8 };
+
+function renderCard(props = {}) {
+  const handlers = { onToggleFavorite: vi.fn(), onRemove: vi.fn() };
+  render(
+    <MemoryRouter>
+      <MovieCard {...movie} isFavorite={false} {...handlers} {...props} />
+    </MemoryRouter>,
+  );
+  return handlers;
+}
+
+test('shows the movie details and links to its page', () => {
+  renderCard();
+  expect(screen.getByRole('link', { name: 'Glass Garden' })).toHaveAttribute('href', '/movies/7');
+  expect(screen.getByText(/2024 · Drama/)).toBeInTheDocument();
+});
+
+test('only recent movies get the New badge', () => {
+  renderCard({ year: 2019 });
+  expect(screen.queryByText('New')).not.toBeInTheDocument();
+});
+
+test('the favorite button reflects its state', () => {
+  renderCard({ isFavorite: true });
+  expect(screen.getByRole('button', { name: 'Remove from favorites' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+});
+
+test('buttons call their handlers with the movie id', async () => {
+  const user = userEvent.setup();
+  const { onToggleFavorite, onRemove } = renderCard();
+
+  await user.click(screen.getByRole('button', { name: 'Add to favorites' }));
+  expect(onToggleFavorite).toHaveBeenCalledWith(7);
+
+  await user.click(screen.getByRole('button', { name: 'Delete' }));
+  expect(onRemove).toHaveBeenCalledWith(7);
+});
+```
+
+Key ideas:
+
+- **`render`** puts the component into jsdom. The card contains a `Link`, which needs a router, so it is wrapped in `MemoryRouter`. A **memory router** keeps the URL in memory instead of the address bar, which is what you want in tests.
+- **`vi.fn()`** creates a **mock function**. It records how it was called, so you can assert `toHaveBeenCalledWith(7)`.
+- **`screen`** queries the rendered output. The helper `renderCard` avoids repeating the setup and lets each test override one prop.
+- **`await user.click(...)`**. `userEvent` actions are asynchronous, so always `await` them and call `userEvent.setup()` first.
+
+### Choosing a query
+
+| Query | Use it when |
+| ----- | ----------- |
+| `getByRole('button', { name: '...' })` | **First choice.** Matches how assistive technology sees the page, so it also checks accessibility |
+| `getByLabelText('Title')` | Form fields |
+| `getByText('...')` | Non-interactive text |
+| `getByTestId('...')` | Last resort, with a `data-testid` attribute |
+
+The prefix decides what happens when nothing matches:
+
+| Prefix | No match | Use for |
+| ------ | -------- | ------- |
+| `getBy...` | Throws an error | Something that must be there now |
+| `queryBy...` | Returns `null` | Asserting something is **absent** |
+| `findBy...` | Waits (up to 1 second), then throws | Something that appears **after** an async step |
+
+Add `All` (`getAllByRole`) when several elements are expected. If a test fails, the error output prints the page's HTML and lists the available roles, which makes problems easy to debug.
+
+## 3. Testing a custom hook
+
+`renderHook` runs a hook inside a test component. Fake timers let you control time, so the test does not wait for real.
+
+```js title="src/hooks/useDebounce.test.js"
+import { act, renderHook } from '@testing-library/react';
+import useDebounce from './useDebounce.js';
+
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => vi.useRealTimers());
+
+test('returns the new value only after the delay', () => {
+  const { result, rerender } = renderHook(({ value }) => useDebounce(value, 300), {
+    initialProps: { value: 'a' },
+  });
+
+  rerender({ value: 'ab' });
+  expect(result.current).toBe('a');
+
+  act(() => vi.advanceTimersByTime(299));
+  expect(result.current).toBe('a');
+
+  act(() => vi.advanceTimersByTime(1));
+  expect(result.current).toBe('ab');
+});
+```
+
+`act` wraps anything that causes React to update outside a normal event, so React processes it before your assertions run. User-event and `findBy` handle `act` for you.
+
+## 4. Mocking the network
+
+Component tests should never use the real network. They would be slow, flaky, and fail when you are offline. Because Lesson 14 put all requests into `src/api/movies.js`, replacing that one module is enough.
+
+```js
+vi.mock('./api/movies.js');   // every export becomes a mock function
+
+vi.mocked(fetchMovies).mockResolvedValue(movies);                          // success
+vi.mocked(fetchMovies).mockRejectedValue(new Error('Request failed...'));  // failure
+```
+
+The app needs its providers (store, query client, router, theme), so a shared helper renders any UI inside them. The helper creates a fresh store and a fresh query client for each call, so no test leaks state into another. It also turns retries off, so a failing request fails at once and not after three tries.
+
+```jsx title="src/test/renderApp.jsx"
+import { render } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Provider } from 'react-redux';
+import { MemoryRouter } from 'react-router';
+import ThemeProvider from '../context/ThemeProvider.jsx';
+import { makeStore } from '../store/index.js';
+
+// Renders any UI inside the same providers the real app uses
+export function renderWithProviders(ui, { route = '/', basename, preloadedState } = {}) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } }, // fail fast in tests
+  });
+  const store = makeStore(preloadedState);
+
+  const result = render(
+    <Provider store={store}>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[route]} basename={basename}>
+          <ThemeProvider>{ui}</ThemeProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    </Provider>,
+  );
+
+  return { store, queryClient, ...result };
+}
+```
+
+## 5. Integration tests for the whole app
+
+These tests exercise several pieces at once: the router, the query cache, the form and the store.
+
+```jsx title="src/App.test.jsx (excerpt)"
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import App from './App.jsx';
+import { renderWithProviders } from './test/renderApp.jsx';
+import { fetchMovies } from './api/movies.js';
+import movies from '../public/movies.json';
+
+vi.mock('./api/movies.js');
+
+beforeEach(() => {
+  localStorage.clear();
+  vi.mocked(fetchMovies).mockResolvedValue(movies);
+});
+afterEach(() => vi.clearAllMocks());
+
+test('home page loads movies through TanStack Query', async () => {
+  renderWithProviders(<App />);
+  expect(screen.getByText('Loading movies...')).toBeInTheDocument();
+  expect(await screen.findAllByRole('article')).toHaveLength(8);
+  expect(fetchMovies).toHaveBeenCalledTimes(1);
+});
+
+test('navigating to a detail page reuses the cached list (no second request)', async () => {
+  const user = userEvent.setup();
+  renderWithProviders(<App />);
+  await screen.findAllByRole('article');
+  await user.click(screen.getByRole('link', { name: 'Tidewater' }));
+  expect(await screen.findByRole('heading', { name: 'Tidewater', level: 2 })).toBeInTheDocument();
+  expect(fetchMovies).toHaveBeenCalledTimes(1);
+});
+
+test('shows the error message when the query fails', async () => {
+  vi.mocked(fetchMovies).mockRejectedValue(new Error('Request failed with status 500'));
+  renderWithProviders(<App />);
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Could not load movies: Request failed with status 500',
+  );
+});
+
+test('deleting removes the card and its favorite', async () => {
+  const user = userEvent.setup();
+  renderWithProviders(<App />);
+  await screen.findAllByRole('article');
+  await user.click(screen.getAllByRole('button', { name: 'Add to favorites' })[0]);
+  expect(screen.getByText('Favorites: 1')).toBeInTheDocument();
+  await user.click(screen.getAllByRole('button', { name: 'Delete' })[0]);
+  expect(await screen.findAllByRole('article')).toHaveLength(7);
+  expect(screen.getByText('Favorites: 0')).toBeInTheDocument();
+});
+```
+
+Notice what these tests prove that no unit test could: the loading text appears before the data, a failed request produces a visible error, going to another page does not trigger a second request (the cache works), and deleting a movie updates both the list and the header.
+
+### The form
+
+The validation test types invalid values and checks for the messages, then fixes them and checks that the movie appears:
+
+```jsx
+test('the form validates, then adds a movie to the cache', async () => {
+  const user = userEvent.setup();
+  renderWithProviders(<App />);
+  await screen.findAllByRole('article');
+
+  await user.click(screen.getByRole('button', { name: 'Add movie' }));
+  expect(await screen.findByText('Title is required')).toBeInTheDocument();
+  expect(screen.getAllByRole('article')).toHaveLength(8);
+
+  await user.type(screen.getByLabelText('Title'), 'a');
+  await user.click(screen.getByRole('button', { name: 'Add movie' }));
+  expect(await screen.findByText('Use at least 2 characters')).toBeInTheDocument();
+
+  await user.clear(screen.getByLabelText('Title'));
+  await user.type(screen.getByLabelText('Title'), 'Night Bus');
+  await user.click(screen.getByRole('button', { name: 'Add movie' }));
+
+  expect(await screen.findByRole('link', { name: 'Night Bus' })).toBeInTheDocument();
+  expect(screen.getAllByRole('article')).toHaveLength(9);
+  expect(screen.getByLabelText('Title')).toHaveValue('');
+});
+```
+
+### Routing
+
+`renderWithProviders` takes a `route`, which becomes the memory router's starting URL. That lets a test open a deep link directly.
+
+```jsx title="src/routing.test.jsx (excerpt)"
+test('a deep link waits for the data', async () => {
+  renderWithProviders(<App />, { route: '/movies/2' });
+  expect(screen.getByText('Loading movie...')).toBeInTheDocument();
+  expect(
+    await screen.findByRole('heading', { name: 'The Last Lighthouse', level: 2 }),
+  ).toBeInTheDocument();
+});
+
+test('unknown paths show the not found page', async () => {
+  renderWithProviders(<App />, { route: '/nope/at/all' });
+  expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeInTheDocument();
+});
+
+test('links respect a base path such as /SDEV-Resources/', async () => {
+  renderWithProviders(<App />, {
+    route: '/SDEV-Resources/movies/3',
+    basename: '/SDEV-Resources/',
+  });
+  expect(await screen.findByRole('heading', { name: 'Paper Moons', level: 2 })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/SDEV-Resources/');
+});
+```
+
+The last test checks the same base path you will rely on when you deploy in Lesson 17.
+
+## Running the tests
+
+```sh
+npm test               # watch mode while you work
+npm run test:run       # run everything once
+npm run coverage       # also report which lines the tests executed
+```
+
+Filmshelf's suite has 29 tests across 7 files, and they pass in a few seconds. A coverage run on this project reports about 96% of statements covered. The report lists any file or line your tests never ran, such as the keyboard shortcut in `SearchBar`, which is a useful to-do list.
+
+<Aside type="caution" title="Coverage is a tool, not a goal">
+A line can run without anything checking its result, and chasing 100% leads to meaningless tests. Use the report to find untested behaviour, and write tests for things that would hurt if they broke: the main user journeys, tricky logic and bugs you have fixed.
+</Aside>
+
+## Habits of good tests
+
+- **One behaviour per test**, and a name that says what it checks. When it fails, the name should tell you what broke.
+- **Independent tests.** Reset shared state (`localStorage`, mocks) in `beforeEach` and `afterEach`.
+- **Prefer roles and labels** over test ids and class names.
+- **Do not test the libraries.** React Router and TanStack Query have their own tests. Test how your code uses them.
+- **Avoid snapshot tests for components.** Large snapshots break on any markup change and teach people to press "update" without reading.
+- **Write a test when you find a bug**: reproduce the bug in a failing test, fix the code, and watch the test pass. The bug cannot quietly return.
+- **Run tests automatically** before deploying. Lesson 17 adds them to a deployment workflow.
+
+### End-to-end tests
+
+Playwright and Cypress open your running app in a real browser and click through it, which catches problems that jsdom cannot, such as layout, real navigation and browser differences. They are slower, so use them for a few critical journeys (sign in, add to cart, check out) and let the faster tests cover the rest. Start with the [Playwright introduction](https://playwright.dev/docs/intro) when you are ready.
+
+## Check yourself
+
+1. What is the difference between `getByText`, `queryByText` and `findByText`?
+2. Why does the `MovieCard` test wrap the component in `MemoryRouter`?
+3. Write a test that renders a `<button>` component labelled "Save" and checks that clicking it calls `onSave` once.
+4. Why does `renderWithProviders` create a new `QueryClient` for each call?
+
+<details>
+<summary>Answers</summary>
+
+1. `getByText` throws if the text is missing, so use it for things that must exist. `queryByText` returns `null`, so use it to assert that something is absent. `findByText` waits for the text to appear, so use it after async work.
+2. The card renders a `Link`, and `Link` needs a router above it. `MemoryRouter` provides one without a browser address bar.
+3. ```jsx
+   test('calls onSave when clicked', async () => {
+     const user = userEvent.setup();
+     const onSave = vi.fn();
+     render(<SaveButton onSave={onSave} />);
+     await user.click(screen.getByRole('button', { name: 'Save' }));
+     expect(onSave).toHaveBeenCalledTimes(1);
+   });
+   ```
+4. The query client stores cached data. A shared client would carry data from one test into the next, and a test could pass or fail depending on the order they run in. A fresh client per test keeps them independent.
+
+</details>

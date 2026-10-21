@@ -1,0 +1,208 @@
+---
+title: "1. Django Foundations"
+description: "Set up a Django project, understand its structure, and serve your first page."
+difficulty: beginner
+readingTime: 14
+tags: [django, python, setup]
+sidebar:
+  order: 1
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+**Django** is a Python web framework that includes almost everything a backend needs: URL routing, templates, a database
+layer (the ORM), forms, user accounts, an admin site and more. Throughout this course you will build **Book Club**, a site
+where members browse books, add them and post reviews, and then expose the same data as a REST API.
+
+## How a web request flows through Django
+
+```text
+Browser ─▶ urls.py ─▶ view ─▶ template ─▶ HTML ─▶ Browser
+                       │
+                       ▼
+                model / database
+```
+
+1. The browser asks for a URL such as `/books/3/`.
+2. Django looks through `urls.py` for a matching pattern and picks the **view** (a Python function or class).
+3. The view does the work: it reads from or writes to the database through **models**.
+4. The view passes the data to a **template**, which produces HTML (or the view returns JSON).
+5. Django sends the response back.
+
+This is called MVT (Model, View, Template), Django's take on MVC.
+
+## Set up the environment
+
+<Steps>
+
+1. Create a folder and a virtual environment (see the packages lesson in Programming Fundamentals):
+
+   ```sh
+   mkdir bookclub-project
+   cd bookclub-project
+   python -m venv venv
+   venv\Scripts\activate          # Windows
+   source venv/bin/activate       # macOS and Linux
+   ```
+
+2. Install Django and record the version:
+
+   ```sh
+   pip install "django==5.2.*"
+   pip freeze > requirements.txt
+   ```
+
+3. Create the project. The dot at the end puts `manage.py` in the current folder instead of nesting another one:
+
+   ```sh
+   django-admin startproject bookclub .
+   ```
+
+4. Create an **app**, a self-contained feature of the site:
+
+   ```sh
+   python manage.py startapp books
+   ```
+
+5. Start the development server and visit `http://127.0.0.1:8000/`:
+
+   ```sh
+   python manage.py runserver
+   ```
+
+</Steps>
+
+You should see Django's rocket page. The server reloads automatically when you save a file.
+
+## Project versus app
+
+A Django **project** is the whole website and its configuration. An **app** is one reusable piece of functionality inside it
+(books, accounts, payments). A project contains many apps.
+
+```text
+bookclub-project/
+├── manage.py            command-line tool for everything: runserver, migrate, test...
+├── requirements.txt
+├── bookclub/            the project package (configuration)
+│   ├── settings.py      all settings
+│   ├── urls.py          the root URL table
+│   ├── asgi.py          entry points for production servers
+│   └── wsgi.py
+└── books/               our first app
+    ├── admin.py         registers models with the admin site
+    ├── apps.py
+    ├── models.py        database tables
+    ├── tests.py         automated tests
+    ├── views.py         request handlers
+    └── migrations/      history of database changes
+```
+
+## Settings you should know
+
+Open `bookclub/settings.py`:
+
+| Setting | Meaning |
+| ------- | ------- |
+| `SECRET_KEY` | Used for signing cookies and tokens. Never publish a real one. |
+| `DEBUG` | `True` shows detailed error pages. **Must be `False` in production.** |
+| `ALLOWED_HOSTS` | Hostnames the site may serve. Required when `DEBUG` is `False`. |
+| `INSTALLED_APPS` | Every app Django should load, including yours. |
+| `MIDDLEWARE` | Code that wraps every request (security, sessions, CSRF). |
+| `TEMPLATES` | Where to find HTML templates. |
+| `DATABASES` | Database connection. SQLite by default. |
+
+Tell Django about your app by adding it to `INSTALLED_APPS`:
+
+```python title="bookclub/settings.py (excerpt)"
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'books',                         # our app
+]
+```
+
+## Your first view and URL
+
+A view is a function that takes a request and returns a response.
+
+```python title="books/views.py"
+from django.http import HttpResponse
+
+
+def home(request):
+    return HttpResponse("Welcome to Book Club")
+```
+
+The app gets its own URL table. This keeps each app independent:
+
+```python title="books/urls.py"
+from django.urls import path
+
+from . import views
+
+app_name = "books"          # a namespace, so URL names cannot clash between apps
+
+urlpatterns = [
+    path("", views.home, name="home"),
+]
+```
+
+Include the app's URLs from the project's table:
+
+```python title="bookclub/urls.py"
+from django.contrib import admin
+from django.urls import include, path
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("", include("books.urls")),
+]
+```
+
+Reload the browser and the home page now says "Welcome to Book Club".
+
+<Aside type="tip" title="Run checks often">
+`python manage.py check` validates your configuration without starting the server. It catches typos in settings and URL patterns early.
+</Aside>
+
+## The commands you will use daily
+
+| Command | Purpose |
+| ------- | ------- |
+| `python manage.py runserver` | Start the development server |
+| `python manage.py startapp name` | Create a new app |
+| `python manage.py makemigrations` | Turn model changes into migration files |
+| `python manage.py migrate` | Apply migrations to the database |
+| `python manage.py createsuperuser` | Create an admin account |
+| `python manage.py shell` | Python prompt with Django loaded |
+| `python manage.py test` | Run automated tests |
+
+Run `python manage.py migrate` once now. Django's built-in apps (admin, auth, sessions) need their tables.
+
+## Check yourself
+
+1. What is the difference between a Django project and an app?
+2. You add an app but its models are ignored. What did you most likely forget?
+3. Add a view `about` at `/about/` that returns "About Book Club".
+
+<details>
+<summary>Answers</summary>
+
+1. The project is the whole site and its settings. An app is one feature inside it. A project has many apps.
+2. Adding the app's name to `INSTALLED_APPS`.
+3. Add the view and a route:
+
+```python
+# books/views.py
+def about(request):
+    return HttpResponse("About Book Club")
+
+# books/urls.py
+path("about/", views.about, name="about"),
+```
+
+</details>

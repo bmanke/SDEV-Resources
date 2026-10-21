@@ -1,0 +1,201 @@
+---
+title: "7. Forms and Validation"
+description: "Collect user input with accessible forms, read it with FormData, and validate it with HTML and JavaScript."
+difficulty: intermediate
+readingTime: 16
+tags: [javascript, forms, validation]
+sidebar:
+  order: 7
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Forms are how users send information to your application: sign-ups, searches, settings, comments. A good form is
+accessible, easy to fill in, and **validated** so bad data never gets through.
+
+## A well-built form
+
+```html title="index.html"
+<form id="signup" novalidate>
+  <div class="field">
+    <label for="name">Name</label>
+    <input id="name" name="name" type="text" required minlength="2" autocomplete="name" />
+    <p class="error" id="name-error" aria-live="polite"></p>
+  </div>
+
+  <div class="field">
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" required autocomplete="email" />
+    <p class="error" id="email-error" aria-live="polite"></p>
+  </div>
+
+  <div class="field">
+    <label for="age">Age</label>
+    <input id="age" name="age" type="number" min="13" max="120" required />
+    <p class="error" id="age-error" aria-live="polite"></p>
+  </div>
+
+  <div class="field">
+    <label for="plan">Plan</label>
+    <select id="plan" name="plan">
+      <option value="free">Free</option>
+      <option value="pro">Pro</option>
+    </select>
+  </div>
+
+  <label><input type="checkbox" name="newsletter" /> Send me the newsletter</label>
+
+  <button type="submit">Create account</button>
+</form>
+```
+
+Key points:
+
+- Every input has a **`<label for="...">`** that matches its `id`. Clicking the label focuses the field and screen readers announce it.
+- `name` is the key under which the value is submitted.
+- `type` gives the right mobile keyboard and built-in checks (`email`, `number`, `date`, `password`...).
+- `novalidate` turns off the browser's pop-up messages so you can show your own. (Leave it off if you are happy with the defaults.)
+
+## Built-in validation attributes
+
+| Attribute | Rule |
+| --------- | ---- |
+| `required` | Must not be empty |
+| `minlength` / `maxlength` | Text length limits |
+| `min` / `max` | Number or date limits |
+| `pattern` | Must match a regular expression |
+| `type="email"` / `"url"` | Must look like that kind of value |
+
+The `ValidityState` of each field is available in JavaScript:
+
+```js
+const email = document.querySelector('#email');
+console.log(email.validity.valid);          // true / false
+console.log(email.validity.valueMissing);   // required but empty
+console.log(email.validity.typeMismatch);   // not shaped like an email
+console.log(email.validationMessage);       // browser's own message
+```
+
+## Handling submission
+
+Listen to the form's `submit` event (not the button's click), because it also fires when the user presses Enter.
+
+```js title="main.js"
+const form = document.querySelector('#signup');
+
+form.addEventListener('submit', (event) => {
+  event.preventDefault();                       // stop the page reload
+
+  const data = new FormData(form);              // collects every named field
+  console.log(data.get('name'));
+  console.log(data.get('plan'));
+  console.log(data.get('newsletter'));          // 'on' if checked, null if not
+
+  const values = Object.fromEntries(data);      // { name: '...', email: '...', ... }
+  console.log(values);
+});
+```
+
+`FormData` returns strings only. Convert numbers yourself with `Number(values.age)`.
+
+## Custom validation
+
+Write one function per rule, so each is easy to read and test. Each returns an error message, or an empty string when the value is fine.
+
+```js
+function validateName(value) {
+  if (value.trim().length < 2) return 'Name must be at least 2 characters.';
+  return '';
+}
+
+function validateEmail(value) {
+  const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  return looksLikeEmail ? '' : 'Enter an email like name@example.com.';
+}
+
+function validateAge(value) {
+  const age = Number(value);
+  if (!Number.isInteger(age)) return 'Age must be a whole number.';
+  if (age < 13 || age > 120) return 'Age must be between 13 and 120.';
+  return '';
+}
+```
+
+Now connect the rules to the page. This version replaces the simple `submit` handler from the previous step:
+
+```js
+const rules = {
+  name: validateName,
+  email: validateEmail,
+  age: validateAge,
+};
+
+function showError(field, message) {
+  const input = form.elements[field];
+  const output = document.querySelector(`#${field}-error`);
+  output.textContent = message;
+  input.setAttribute('aria-invalid', message ? 'true' : 'false');
+}
+
+function validateForm() {
+  let ok = true;
+  for (const [field, rule] of Object.entries(rules)) {
+    const message = rule(form.elements[field].value);
+    showError(field, message);
+    if (message) ok = false;
+  }
+  return ok;
+}
+
+form.addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (!validateForm()) return;                   // stop here when something is wrong
+  console.log('Submit', Object.fromEntries(new FormData(form)));
+  form.reset();
+});
+
+// Give feedback while typing, after the user leaves a field
+for (const field of Object.keys(rules)) {
+  form.elements[field].addEventListener('blur', (event) => {
+    showError(field, rules[field](event.target.value));
+  });
+}
+```
+
+<Aside type="tip" title="Validate in two places">
+Browser validation helps users, but anyone can bypass it. The server must always validate again. Frontend validation is about usability, not security.
+</Aside>
+
+## Good error messages
+
+- Say **what is wrong and how to fix it** ("Password needs at least 8 characters"), not "Invalid input".
+- Place the message next to the field and connect it with `aria-describedby` or an `aria-live` region.
+- Do not rely on colour alone to show an error. Add text or an icon.
+- Keep the user's input after an error. Never clear the form.
+
+## Check yourself
+
+1. Add a `password` field (at least 8 characters, must contain a digit) with its own rule function.
+2. Add a "confirm password" rule that checks it matches the password.
+3. Explain why `new FormData(form)` ignores an input that has no `name` attribute.
+
+<details>
+<summary>Answers</summary>
+
+```js
+// 1
+function validatePassword(value) {
+  if (value.length < 8) return 'Password needs at least 8 characters.';
+  if (!/\d/.test(value)) return 'Password needs at least one number.';
+  return '';
+}
+
+// 2: rules can see the whole form if you pass it in
+function validateConfirm(value) {
+  return value === form.elements.password.value ? '' : 'Passwords do not match.';
+}
+```
+
+3. `FormData` builds its entries from each control's `name`. Without a name there is no key to store the value under.
+
+</details>

@@ -1,0 +1,164 @@
+---
+title: "1. Tooling: Git, Node and Vite"
+description: "Set up the tools every modern frontend project depends on, and learn the daily Git and npm workflow."
+difficulty: beginner
+readingTime: 12
+tags: [tooling, git, node, vite]
+sidebar:
+  order: 1
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Before writing any JavaScript, set up a workflow. Frontend developers rely on four tools:
+
+| Tool | What it does |
+| ---- | ------------ |
+| **Git** | Records the history of your code so you can undo mistakes and collaborate. |
+| **GitHub** | Hosts Git repositories online: backup, sharing, and automation. |
+| **Node.js** | Runs JavaScript outside the browser, so you can use developer tools. It also provides `npm`. |
+| **Vite** | A development server and build tool that makes your project fast to work on. |
+
+## Git in five commands
+
+A Git **repository** is a project folder whose history Git tracks. A **commit** is a saved snapshot with a message.
+
+```sh
+git clone https://github.com/your-name/your-repo.git   # download a repository
+cd your-repo
+
+git status                    # what changed?
+git add .                     # stage every change for the next commit
+git commit -m "Add header"    # save a snapshot with a message
+git push                      # upload your commits to GitHub
+git pull                      # download new commits from GitHub
+```
+
+Habits that save you pain:
+
+- Commit **small and often**, each with a message that says what changed ("Add form validation", not "stuff").
+- Pull before you push when working with others.
+- Keep generated folders such as `node_modules` and `dist` out of Git by listing them in `.gitignore`.
+
+<Aside type="tip" title="Starting from scratch">
+In a new folder, run `git init`, make a commit, create an empty repository on GitHub, then follow the two commands GitHub shows (`git remote add origin ...` and `git push -u origin main`).
+</Aside>
+
+## Node.js and npm
+
+Check that Node is installed:
+
+```sh
+node --version
+npm --version
+```
+
+**npm** (Node Package Manager) installs libraries and runs project scripts. Each project describes itself in a file called `package.json`.
+
+## Creating a project with Vite
+
+<Steps>
+
+1. Create the project and choose the **vanilla** (plain JavaScript) template:
+
+   ```sh
+   npm create vite@latest my-app -- --template vanilla
+   ```
+
+2. Move into it and install the dependencies:
+
+   ```sh
+   cd my-app
+   npm install
+   ```
+
+3. Start the development server:
+
+   ```sh
+   npm run dev
+   ```
+
+4. Open the address it prints (usually `http://localhost:5173`). When you save a file, the page updates instantly.
+
+</Steps>
+
+## What is in the project?
+
+```text
+my-app/
+├── index.html        the page the browser loads
+├── package.json      project name, scripts and dependencies
+├── package-lock.json exact versions installed (commit this)
+├── node_modules/     downloaded libraries (never commit this)
+├── public/           files served as-is (favicons, images)
+└── src/
+    ├── main.js       your JavaScript entry point
+    └── style.css
+```
+
+The important link is in `index.html`:
+
+```html title="index.html"
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My App</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <!-- type="module" lets main.js use import and export -->
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
+```
+
+```js title="src/main.js"
+import './style.css';
+
+document.querySelector('#app').innerHTML = `<h1>Hello, Vite</h1>`;
+console.log('main.js is running');
+```
+
+## package.json scripts
+
+The `scripts` section gives short names to commands.
+
+```json title="package.json (excerpt)"
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  }
+}
+```
+
+| Command | Purpose |
+| ------- | ------- |
+| `npm run dev` | Development server with live reload |
+| `npm run build` | Create the optimized production files in `dist/` |
+| `npm run preview` | Serve the built files locally to check them |
+
+(`npm start` and `npm test` also work without the word `run`.)
+
+## Dev server versus build
+
+- **Development** prioritizes fast feedback and helpful errors.
+- **Production** (`dist/`) is minified and optimized for visitors. Deploying means uploading `dist/`. You will do this in lesson 12.
+
+## Check yourself
+
+1. What is the difference between `git add` and `git commit`?
+2. Why should `node_modules` be in `.gitignore`, and how does a teammate get those files?
+3. Create a Vite vanilla project, change the heading text, and confirm that the browser updates without a manual refresh.
+
+<details>
+<summary>Answers</summary>
+
+1. `git add` stages changes (chooses what goes into the next snapshot). `git commit` saves the staged changes as a snapshot with a message.
+2. It is huge and can be regenerated from `package.json` and `package-lock.json`. A teammate clones the repo and runs `npm install`.
+3. Edit the text in `src/main.js` and save. Vite's hot reload updates the page.
+
+</details>
