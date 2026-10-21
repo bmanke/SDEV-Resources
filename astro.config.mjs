@@ -29,7 +29,6 @@ export default defineConfig({
 			customCss: [
 				'@fontsource-variable/inter',
 				'@fontsource-variable/jetbrains-mono',
-				'./src/styles/custom.css',
 			],
 			// Full-text search is powered by Pagefind and is ON by default.
 			// It indexes the site during `astro build` (search is unavailable in `astro dev`).
