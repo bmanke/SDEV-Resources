@@ -1,6 +1,6 @@
 ---
 title: "14. Select and OrderBy"
-description: "`Select` projects shape; `OrderBy` defines a primary sort key."
+description: "Shape each item with Select and sort the result with OrderBy."
 sidebar:
   order: 4
 ---
@@ -9,38 +9,36 @@ sidebar:
 
 ## Prerequisites
 
-- Lesson 12.
+Lesson 13.
 
 ## Plain-language explanation
 
-`Select` projects shape; `OrderBy` defines a primary sort key.
+`Select` transforms each element into something new, such as just its title. `OrderBy` sorts ascending and `OrderByDescending` sorts descending. LINQ operators are chained left to right, and sorting before or after a `Select` is only the same if the sort key still exists after projecting, so sort first when in doubt.
 
 ## Focused example / procedure
 
 ```csharp
-var cards = tracks
-    .Select(t => new { t.Title, t.Price })
-    .OrderBy(t => t.Price);
+var tracks = Music.Tracks;
+
+var titles = tracks.OrderBy(t => t.Title).Select(t => t.Title);
+Console.WriteLine(string.Join(", ", titles));
 ```
 
 ## Expected output or behaviour
 
-Output rows are title/price pairs sorted by price ascending.
+`Aurora, Glass, Harbor, Ice Bloom, Late Train, Night Platform, River Run, Tide Table`
 
 ## Practice task
 
-Sort descending by year instead.
+Show titles from longest to shortest track.
 
 <details>
 <summary>Answer / check</summary>
 
-
-Use `.OrderByDescending(t => t.Year)`.
-
+`tracks.OrderByDescending(t => t.Seconds).Select(t => t.Title)` → `Late Train, Night Platform, River Run, Harbor, Ice Bloom, Aurora, Glass, Tide Table`.
 
 </details>
 
-
 ## Next lesson
 
-- [15. ThenBy and Deterministic Ordering](/lessons/enterprise-application-development/03-linq-with-music-catalogue/05-thenby-and-deterministic-order/)
+- [15. ThenBy and Deterministic Order](../05-thenby-and-deterministic-order/)

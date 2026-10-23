@@ -1,46 +1,45 @@
 ---
-title: "7. BAK vs BACPAC vs DACPAC"
-description: "`BAK` is a full database backup/restore artifact, `BACPAC` carries schema plus data for import/export, and `DACPAC` carries schema only for deployment."
+title: "7. Backup and Package Types"
+description: "Tell BAK, BACPAC and DACPAC files apart before touching a database."
 sidebar:
   order: 1
 ---
 
-**Estimated time:** 8 minutes
+**Estimated time:** 6 minutes
 
 ## Prerequisites
 
-- Basic SQL Server vocabulary.
+Basic idea of what a database is.
 
 ## Plain-language explanation
 
-`BAK` is a full database backup/restore artifact, `BACPAC` carries schema plus data for import/export, and `DACPAC` carries schema only for deployment.
+SQL Server teaching databases arrive in different file types, and each one is opened a different way. Mixing them up is the usual reason an import fails or, worse, overwrites something. Do not rely on file size to guess the type; look at the extension.
 
 ## Focused example / procedure
 
-```text
-Use BAK    -> restore full backup to SQL Server instance
-Use BACPAC -> import teaching schema+data into a new database
-Use DACPAC -> publish schema changes without data payload
-```
+| File | What it holds | How you open it in SSMS |
+| --- | --- | --- |
+| `.bak` | A native SQL Server backup of a database, including its data | **Restore Database…** |
+| `.bacpac` | A portable package of schema **and data** | **Import Data-tier Application…** |
+| `.dacpac` | Schema definition (a typical one has no table data) | Deploy or upgrade a data-tier application |
+
+Importing and restoring are different operations. A BACPAC import creates a new database from a package; a BAK restore replays a native backup. A BACPAC is best taken from a database with no active connections, so the data is consistent.
 
 ## Expected output or behaviour
 
-You can explain the correct file choice without risking accidental overwrite.
+You can name the right SSMS command for each of the three file types.
 
 ## Practice task
 
-Which artifact should you use to load sample classroom data into a new local database?
+Your instructor gives you `Teaching.bacpac`. Which wizard do you use, and does it contain data?
 
 <details>
 <summary>Answer / check</summary>
 
-
-BACPAC, because it includes both schema and data for import into a new database.
-
+**Import Data-tier Application…**, and yes, a BACPAC includes data. A schema-only DACPAC would give you empty tables.
 
 </details>
 
-
 ## Next lesson
 
-- [8. Safe Teaching Database Import Lab](/lessons/enterprise-application-development/02-database-and-linqpad-setup/02-safe-teaching-database-import/)
+- [8. Safe Teaching Database Import](../02-safe-teaching-database-import/)

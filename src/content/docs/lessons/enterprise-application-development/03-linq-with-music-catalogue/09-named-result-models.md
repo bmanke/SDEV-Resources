@@ -1,48 +1,61 @@
 ---
 title: "19. Named Result Models"
-description: "Use named models for reusable query results, especially in services/UI boundaries."
+description: "Replace an anonymous projection with a named type a service can return."
 sidebar:
   order: 9
 ---
 
-**Estimated time:** 6 minutes
+**Estimated time:** 8 minutes
 
 ## Prerequisites
 
-- Lesson 18.
+Lesson 18.
 
 ## Plain-language explanation
 
-Use named models for reusable query results, especially in services/UI boundaries.
+When one layer returns data to another, the receiver needs a type it can name. A record with only the fields the screen needs is a view model. Naming the shape also makes the service easy to test, because you can compare results to expected records.
 
 ## Focused example / procedure
 
 ```csharp
-public record AlbumCard(string Name, int TrackCount);
+// ArtistSummary.cs
+public record ArtistSummary(string Name, int AlbumCount, List<string> Albums);
+```
 
-var cards = albums.Select(a => new AlbumCard(
-    a.Name,
-    tracks.Count(t => t.AlbumId == a.Id)));
+```csharp
+// Program.cs
+static List<ArtistSummary> GetArtistSummaries() =>
+    Music.Artists
+        .OrderBy(a => a.Name)
+        .Select(a => new ArtistSummary(
+            a.Name,
+            Music.Albums.Count(al => al.ArtistId == a.Id),
+            Music.Albums.Where(al => al.ArtistId == a.Id).Select(al => al.Title).ToList()))
+        .ToList();
+
+foreach (var s in GetArtistSummaries())
+    Console.WriteLine($"{s.Name}: {s.AlbumCount}");
 ```
 
 ## Expected output or behaviour
 
-Results can be passed to another method/component without anonymous-type scope limits.
+```
+Aurora Vale: 2
+Brick Lane Trio: 2
+Cobalt Sky: 0
+```
 
 ## Practice task
 
-Add a `CheapestTrackPrice` property to `AlbumCard`.
+Add `LatestYear` (nullable) to the record. What should it be for Cobalt Sky?
 
 <details>
 <summary>Answer / check</summary>
 
-
-Compute `tracks.Where(...).Min(t => t.Price)` with empty handling as needed.
-
+`int?`, and it should be `null` for Cobalt Sky because there is no album to take a maximum from. See the empty-sequence rules in Lesson 21.
 
 </details>
 
-
 ## Next lesson
 
-- [20. Count, Any, and All on Empty Sequences](/lessons/enterprise-application-development/03-linq-with-music-catalogue/10-count-any-all/)
+- [20. Count, Any and All](../10-count-any-all/)

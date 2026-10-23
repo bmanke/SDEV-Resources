@@ -1,6 +1,6 @@
 ---
-title: "34. MudBlazor Installation Lab (Interactive Server)"
-description: "Install MudBlazor with official package/docs for your ."
+title: "34. MudBlazor Installation"
+description: "Add a component library and verify it with one button."
 sidebar:
   order: 6
 ---
@@ -9,38 +9,44 @@ sidebar:
 
 ## Prerequisites
 
-- Modern Blazor Web App project created.
+Lesson 33 and a working WorkshopWeb project.
 
 ## Plain-language explanation
 
-Install MudBlazor with official package/docs for your .NET version, then register services once in `Program.cs`.
+MudBlazor is a free Material Design component library. It needs a NuGet package, a service registration, a stylesheet and script, and a set of provider components in the layout. Follow the installation guide for the exact MudBlazor and .NET versions you use, because details such as asset paths change between releases. Missing the script reference or providers is the usual reason styled components look right but do nothing.
 
 ## Focused example / procedure
 
-1. Add NuGet package `MudBlazor` with a supported version.
-2. Register `builder.Services.AddMudServices();`.
-3. Add MudBlazor providers in root layout as documented.
-4. Rebuild and confirm a sample `MudButton` renders.
+Setup lab — about 12 minutes.
 
+1. Install the package compatible with your .NET version: `dotnet add WorkshopWeb package MudBlazor`.
+2. In `Program.cs` add `using MudBlazor.Services;` and `builder.Services.AddMudServices();` before `builder.Build()`.
+3. In `Components/_Imports.razor` add `@using MudBlazor`. (If you also use QuickGrid and see name clashes, qualify names or import MudBlazor per page instead.)
+4. In `App.razor`, add the Roboto font and `_content/MudBlazor/MudBlazor.min.css` to `<head>`, and `_content/MudBlazor/MudBlazor.min.js` after the Blazor script. Use the exact tags shown in the installation guide for your version.
+5. In `MainLayout.razor` add `<MudThemeProvider />`, `<MudPopoverProvider />`, `<MudDialogProvider />` and `<MudSnackbarProvider />`.
+6. Interactive MudBlazor components need an interactive render mode; the simplest course setup is global Server interactivity.
+7. Remove Bootstrap links if you are not using them, to avoid conflicting styles.
+8. Test on a page:
+
+```razor
+<MudButton Variant="Variant.Filled" Color="Color.Primary">Hello MudBlazor</MudButton>
+```
 
 ## Expected output or behaviour
 
-App builds and renders Mud components without script/style errors.
+A filled primary-colour button in the Roboto font, with no console errors.
 
 ## Practice task
 
-Why should you verify version compatibility before installation?
+The button is styled but a dialog never opens. What do you check?
 
 <details>
 <summary>Answer / check</summary>
 
-
-Mismatched package/framework versions can cause runtime or build failures in components and JS interop.
-
+That the JavaScript file is referenced after the Blazor script, that `MudDialogProvider` is in the layout, and that the page is interactive.
 
 </details>
 
-
 ## Next lesson
 
-- [35. Typed Text and Numeric Controls](/lessons/enterprise-application-development/04-blazor-ui-building-blocks/07-typed-input-controls/)
+- [35. Typed Input Controls](../07-typed-input-controls/)

@@ -1,47 +1,53 @@
 ---
-title: "54. Authentication and Identity Setup with Migrations"
-description: "Use ASP."
+title: "54. Authentication and Identity Setup"
+description: "Create an app with individual accounts and prepare its database properly."
 sidebar:
   order: 5
 ---
 
-**Estimated time:** 10 minutes
+**Estimated time:** 14 minutes
 
 ## Prerequisites
 
-- Blazor Web App project and EF basics.
+Lesson 6 and SQL Server LocalDB or SQL Server Express.
 
 ## Plain-language explanation
 
-Use ASP.NET Core Identity with migrations in your app. Do not publish shared admin passwords.
+Authentication answers "who are you?" (sign-in with a password, cookie or external provider); authorization answers "what may you do?". ASP.NET Core Identity provides registration, sign-in, password hashing and a user store, so you should never write your own password handling. Its tables (such as `AspNetUsers`, `AspNetRoles` and `AspNetUserRoles`) live in a database created by migrations. Template development pages sometimes offer an **Apply Migrations** button, but the command line is more reliable and shows real errors.
 
 ## Focused example / procedure
 
-```text
-1. Add Identity packages/templates for your target .NET version.
-2. Configure Identity + EF store in Program.cs.
-3. Create/apply migrations.
-4. Seed roles/users through secure local tooling.
+Setup lab — about 14 minutes.
+
+```shell
+dotnet new blazor -n WorkshopSecure --interactivity Server --auth Individual --use-local-db
+dotnet tool install --global dotnet-ef        # once; use "update" if already installed
+cd WorkshopSecure
+dotnet ef database update
+dotnet run
 ```
+
+If the template also generates a separate context, pass `--context ApplicationDbContext` to the `dotnet ef` command. Then:
+
+1. Open the site and choose **Register**.
+2. In development the template may show a confirmation link instead of sending email; use it only for local practice.
+3. Sign in, then inspect `AspNetUsers` in SQL Server Object Explorer.
 
 ## Expected output or behaviour
 
-Users can register/sign in and Identity tables exist in database.
+A registered user appears in `AspNetUsers` with a `PasswordHash` column, not the password itself.
 
 ## Practice task
 
-Is `AuthorizeView` alone enough to secure server operations?
+Why must the database be updated before the first registration?
 
 <details>
 <summary>Answer / check</summary>
 
-
-No. It hides UI only; server endpoints/services still need authorization checks.
-
+Identity stores users in tables that do not exist until migrations create them. Without them registration fails with a database error.
 
 </details>
 
-
 ## Next lesson
 
-- [55. Roles, Server Authorization, Resource Ownership, User Secrets](/lessons/enterprise-application-development/06-state-checkout-and-security/06-roles-authorization-ownership-and-secrets/)
+- [55. Roles, Server Authorization, Ownership and Secrets](../06-roles-authorization-ownership-and-secrets/)

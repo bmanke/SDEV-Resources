@@ -1,44 +1,68 @@
 ---
-title: "52. Three-Page Checkout Flow"
-description: "Split checkout into staged pages (cart, review, confirm) and pass state intentionally between them."
+title: "52. The Three-Page Checkout Flow"
+description: "Move through landing, edit and checkout while keeping the server in charge."
 sidebar:
   order: 3
 ---
 
-**Estimated time:** 7 minutes
+**Estimated time:** 10 minutes
 
 ## Prerequisites
 
-- Lesson 51.
+Lesson 51.
 
 ## Plain-language explanation
 
-Split checkout into staged pages (cart, review, confirm) and pass state intentionally between them.
+The workflow has three pages. **CartLanding** loads available parts and lets the user add or remove items from a local draft. **CartEdit** lets them set quantities and blocks Continue until every quantity is valid. **CartCheckout** shows a read-only summary from the shared state. The pages cooperate through the scoped `CartState`, but checkout must still revalidate prices, quantities and stock on the server when the order is placed; what the browser displayed is only a preview.
 
 ## Focused example / procedure
 
-```text
-/cart -> /checkout/review -> /checkout/confirm
+```csharp
+// Validation used by CartEdit (also run again on the server)
+static string? ValidateQuantity(int quantity) =>
+    quantity >= 1 ? null : "Quantity must be at least 1.";
+
+Console.WriteLine(ValidateQuantity(0) ?? "ok");
+Console.WriteLine(ValidateQuantity(3) ?? "ok");
+```
+
+```razor
+@* CartLanding.razor (fragment) *@
+@inject CartState State
+@inject NavigationManager Navigation
+
+<button type="button" @onclick="Continue">Continue</button>
+
+@code {
+    private List<CartLine> draft = new();
+    protected override void OnInitialized() => draft = Copy(State.Lines);
+
+    private void Continue()
+    {
+        State.Lines = Copy(draft);                      // commit the draft
+        Navigation.NavigateTo("cart/edit");
+    }
+}
 ```
 
 ## Expected output or behaviour
 
-Users can review before final commit and restart safely when validation fails.
+```
+Quantity must be at least 1.
+ok
+```
 
 ## Practice task
 
-What should happen after successful confirm?
+Why compute the order total again at checkout?
 
 <details>
 <summary>Answer / check</summary>
 
-
-Persist order/invoice, clear scoped draft cart state, and navigate to receipt page.
-
+Because prices or stock may have changed, and the client could have been tampered with. The server's calculation is the one that counts.
 
 </details>
 
-
 ## Next lesson
 
-- [53. AppState, EmployeeView, and Event Unsubscription](/lessons/enterprise-application-development/06-state-checkout-and-security/04-appstate-notifications/)
+- [53. AppState and Change Notifications](../04-appstate-notifications/)

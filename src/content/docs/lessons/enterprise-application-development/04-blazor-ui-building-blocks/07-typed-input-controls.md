@@ -1,46 +1,51 @@
 ---
-title: "35. Typed Text and Numeric Controls"
-description: "Use typed controls (`InputNumber<T>`, validated models) so parsing and validation happen consistently."
+title: "35. Typed Input Controls"
+description: "Bind text and numbers with MudBlazor's generic fields."
 sidebar:
   order: 7
 ---
 
-**Estimated time:** 7 minutes
+**Estimated time:** 8 minutes
 
 ## Prerequisites
 
-- Lessons 31 and 34.
+Lesson 34.
 
 ## Plain-language explanation
 
-Use typed controls (`InputNumber<T>`, validated models) so parsing and validation happen consistently.
+MudBlazor inputs are generic: `MudTextField<string>` and `MudNumericField<int>` bind to a field of exactly that type, and a mismatch is a compile error rather than a runtime surprise. `Immediate="true"` updates the field on every keystroke. `Required` shows a visual hint but it is not a security check; your service must still validate.
 
 ## Focused example / procedure
 
 ```razor
-<InputText @bind-Value="model.Name" />
-<InputNumber @bind-Value="model.CreditLimit" />
-<ValidationMessage For="@(() => model.CreditLimit)" />
+@page "/typed"
+@rendermode InteractiveServer
+
+<MudTextField T="string" Label="Last name" @bind-Value="lastName" Immediate="true" />
+<MudNumericField T="int" Label="Quantity" @bind-Value="quantity" Min="1" />
+<MudText>@lastName x @quantity</MudText>
+
+@code {
+    private string lastName = string.Empty;
+    private int quantity = 1;
+}
 ```
 
 ## Expected output or behaviour
 
-Invalid numeric input shows validation feedback instead of silent conversion bugs.
+Typing in the first box updates the text line immediately; the number box rejects values below 1 using the spin buttons.
 
 ## Practice task
 
-Require credit limit to be >= 0.
+Which field type would you use for an optional quantity that can be blank?
 
 <details>
 <summary>Answer / check</summary>
 
-
-Add `[Range(0, double.MaxValue)]` on the model property.
-
+`int?`: `MudNumericField<int?>` with a nullable field, so "blank" is `null` rather than 0.
 
 </details>
 
-
 ## Next lesson
 
-- [36. Select Inputs and Date Values](/lessons/enterprise-application-development/04-blazor-ui-building-blocks/08-select-and-date-controls/)
+- [36. Select and Date Controls](../08-select-and-date-controls/)

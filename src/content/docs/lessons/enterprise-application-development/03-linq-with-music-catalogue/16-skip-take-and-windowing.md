@@ -1,6 +1,6 @@
 ---
-title: "26. Skip/Take Pagination Windows"
-description: "`Skip` and `Take` define deterministic windows for pagination once ordering is stable."
+title: "26. Skip and Take for Paging"
+description: "Return one page of results from a stable ordering."
 sidebar:
   order: 16
 ---
@@ -9,40 +9,41 @@ sidebar:
 
 ## Prerequisites
 
-- Lessons 15 and 23.
+Lesson 15.
 
 ## Plain-language explanation
 
-`Skip` and `Take` define deterministic windows for pagination once ordering is stable.
+`Skip(n)` ignores the first `n` items and `Take(n)` keeps the next `n`. For page `p` of size `s`, skip `(p - 1) * s`. This only works when the order is deterministic, so sort with a unique tie-breaker first. The total page count is the item count divided by the page size, rounded up.
 
 ## Focused example / procedure
 
 ```csharp
-int page = 2, size = 2;
-var pageRows = tracks
-    .OrderBy(t => t.Title).ThenBy(t => t.Id)
-    .Skip((page - 1) * size)
-    .Take(size);
+var tracks = Music.Tracks.OrderBy(t => t.Id).ToList();
+int pageSize = 3, page = 2;
+
+var items = tracks.Skip((page - 1) * pageSize).Take(pageSize);
+Console.WriteLine(string.Join(", ", items.Select(t => t.Title)));
+Console.WriteLine((int)Math.Ceiling(tracks.Count / (double)pageSize));
 ```
 
 ## Expected output or behaviour
 
-Page 2 returns the second window of stable rows.
+```
+River Run, Late Train, Night Platform
+3
+```
 
 ## Practice task
 
-Get page 3 with size 1.
+Which tracks are on page 3?
 
 <details>
 <summary>Answer / check</summary>
 
-
-Set `page = 3`, `size = 1`, keep deterministic ordering.
-
+`Skip(6).Take(3)` returns the last two tracks, `Harbor` and `Tide Table`, because only 8 exist.
 
 </details>
 
-
 ## Next lesson
 
-- [27. TakeWhile and SkipWhile](/lessons/enterprise-application-development/03-linq-with-music-catalogue/17-takewhile-and-skipwhile/)
+- [27. TakeWhile and SkipWhile](../17-takewhile-and-skipwhile/)

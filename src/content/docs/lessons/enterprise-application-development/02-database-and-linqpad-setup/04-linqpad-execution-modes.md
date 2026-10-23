@@ -1,47 +1,59 @@
 ---
-title: "10. LINQPad Expression, Statements, and Program Modes"
-description: "Expression mode is fastest for one-result snippets, Statements mode supports blocks, and Program mode supports full classes/methods."
+title: "10. LINQPad Execution Modes"
+description: "Choose Expression, Statements or Program mode for the job at hand."
 sidebar:
   order: 4
 ---
 
-**Estimated time:** 7 minutes
+**Estimated time:** 8 minutes
 
 ## Prerequisites
 
-- Lesson 9.
+Lesson 9.
 
 ## Plain-language explanation
 
-Expression mode is fastest for one-result snippets, Statements mode supports blocks, and Program mode supports full classes/methods. `Dump()` is LINQPad-only display output.
+LINQPad has three language modes. **C# Expression** runs a single expression with no trailing semicolon. **C# Statements** runs several semicolon-terminated statements from top to bottom. **C# Program** wraps your code in `void Main()` and lets you write helper methods below it, which is how you prototype a service method before pasting it into your project. `.Dump()` prints a result and is a LINQPad feature; in Visual Studio use `Console.WriteLine`.
 
 ## Focused example / procedure
 
 ```csharp
+// Expression mode (no semicolon)
+Customers.Where(c => c.LastName == "Lee")
+```
+
+```csharp
 // Statements mode
-var totals = new[] { 10m, 20m, 30m };
-var sum = totals.Sum();
-sum.Dump(); // LINQPad-only
+var lees = Customers.Where(c => c.LastName == "Lee").ToList();
+lees.Dump("Lee customers");
+```
+
+```csharp
+// Program mode
+void Main()
+{
+    CountByLastName("Lee").Dump();
+}
+
+int CountByLastName(string last) =>
+    Customers.Count(c => c.LastName == last);
 ```
 
 ## Expected output or behaviour
 
-`Dump()` shows formatted results in LINQPad; the same call is not used in normal app code.
+All three show the matching data; the Program version prints a single number. Changing the language drop-down changes whether `Main` is required.
 
 ## Practice task
 
-Convert the sample to regular C# console output.
+You get a compile error mentioning `Dump` in a Visual Studio project. Why?
 
 <details>
 <summary>Answer / check</summary>
 
-
-Replace `sum.Dump();` with `Console.WriteLine(sum);`.
-
+`Dump()` is added by LINQPad and does not exist in a normal .NET project. Replace it with `Console.WriteLine` or return the value.
 
 </details>
 
-
 ## Next lesson
 
-- [11. Music Catalogue Fixture](/lessons/enterprise-application-development/03-linq-with-music-catalogue/01-music-catalogue-fixture/)
+- [11. The Music Catalogue Fixture](../../03-linq-with-music-catalogue/01-music-catalogue-fixture/)

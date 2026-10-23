@@ -1,6 +1,6 @@
 ---
 title: "12. Lambdas and Where"
-description: "A lambda defines filter logic inline."
+description: "Filter a sequence with a predicate written as a lambda."
 sidebar:
   order: 2
 ---
@@ -9,15 +9,17 @@ sidebar:
 
 ## Prerequisites
 
-- Lesson 11 fixture loaded.
+Lesson 11.
 
 ## Plain-language explanation
 
-A lambda defines filter logic inline. `Where` keeps all elements that satisfy the predicate.
+A lambda is a tiny inline function: `t => t.Genre == "Indie"` reads as "given a track `t`, is its genre Indie?". `Where` keeps every element for which the lambda returns true and drops the rest. The name before `=>` is just a parameter name; use something short but meaningful.
 
 ## Focused example / procedure
 
 ```csharp
+var tracks = Music.Tracks;
+
 var indie = tracks.Where(t => t.Genre == "Indie");
 foreach (var t in indie)
     Console.WriteLine(t.Title);
@@ -25,22 +27,23 @@ foreach (var t in indie)
 
 ## Expected output or behaviour
 
-Only Indie tracks are printed.
+```
+Glass
+River Run
+Tide Table
+```
 
 ## Practice task
 
-Filter tracks released after 2020.
+List the titles of tracks longer than 300 seconds.
 
 <details>
 <summary>Answer / check</summary>
 
-
-`tracks.Where(t => t.Year > 2020)`.
-
+`tracks.Where(t => t.Seconds > 300).Select(t => t.Title)` gives `River Run`, `Late Train`, `Night Platform`.
 
 </details>
 
-
 ## Next lesson
 
-- [13. AND/OR Filters](/lessons/enterprise-application-development/03-linq-with-music-catalogue/03-and-or-filters/)
+- [13. AND/OR Filters](../03-and-or-filters/)

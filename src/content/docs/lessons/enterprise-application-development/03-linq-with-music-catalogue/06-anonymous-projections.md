@@ -1,45 +1,54 @@
 ---
-title: "16. Anonymous Projections Are Strongly Typed"
-description: "Anonymous types are compile-time typed, not dynamic."
+title: "16. Anonymous Projections"
+description: "Return a quick custom shape with an anonymous type."
 sidebar:
   order: 6
 ---
 
-**Estimated time:** 6 minutes
+**Estimated time:** 7 minutes
 
 ## Prerequisites
 
-- Lesson 14.
+Lesson 14.
 
 ## Plain-language explanation
 
-Anonymous types are compile-time typed, not dynamic. The compiler knows exact property names and types.
+`new { t.Title, Minutes = ... }` creates an object of a type the compiler invents. It is still fully typed at compile time (not dynamic), so you get IntelliSense and errors on misspelled properties. Anonymous types are ideal inside a single method, but they cannot be named in a method signature, so use a named class or record when a service must hand data to a page.
 
 ## Focused example / procedure
 
 ```csharp
-var summary = tracks.Select(t => new { t.Title, Cost = t.Price });
-// summary element type is compiler-generated with string Title and decimal Cost
+var tracks = Music.Tracks;
+
+var rows = tracks.Select(t => new
+{
+    t.Title,
+    Minutes = Math.Round(t.Seconds / 60.0, 1)
+});
+
+foreach (var r in rows.Take(3))
+    Console.WriteLine($"{r.Title}: {r.Minutes}");
 ```
 
 ## Expected output or behaviour
 
-You can access `item.Title` and `item.Cost` safely in the same method scope.
+```
+Aurora: 3.5
+Ice Bloom: 4.1
+Glass: 3.3
+```
 
 ## Practice task
 
-When should you switch from anonymous type to named model?
+Project each track's title and a `bool` named `IsLong` that is true for 300 seconds or more.
 
 <details>
 <summary>Answer / check</summary>
 
-
-When returning data across method/component boundaries or API contracts.
-
+`tracks.Select(t => new { t.Title, IsLong = t.Seconds >= 300 })` — three tracks are long: River Run, Late Train, Night Platform.
 
 </details>
 
-
 ## Next lesson
 
-- [17. Ternary and Null/Whitespace Guards](/lessons/enterprise-application-development/03-linq-with-music-catalogue/07-ternary-and-whitespace/)
+- [17. Ternary and Whitespace Checks](../07-ternary-and-whitespace/)

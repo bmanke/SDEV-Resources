@@ -1,46 +1,62 @@
 ---
-title: "32. Partial Code-Behind and CSS Isolation"
-description: "Use `."
+title: "32. Code-Behind and CSS Isolation"
+description: "Move C# into a partial class and scope styles to one component."
 sidebar:
   order: 4
 ---
 
-**Estimated time:** 7 minutes
+**Estimated time:** 8 minutes
 
 ## Prerequisites
 
-- Lesson 31.
+Lesson 31.
 
 ## Plain-language explanation
 
-Use `.razor` for markup and `.razor.cs` partial classes for logic. Match file names for CSS isolation (`Component.razor.css`).
+A component's C# can live in a code-behind file named `Basics.razor.cs`. The class must be `partial`, have the same name as the component, and use the same namespace the compiler generates (project name plus folder path). A file named `Basics.razor.css` beside the component is automatically scoped: its rules apply only to that component. The matching filename is what links them; `@page` has nothing to do with it.
 
 ## Focused example / procedure
 
-```text
-CustomerSearch.razor
-CustomerSearch.razor.cs
-CustomerSearch.razor.css
+```razor
+@* Components/Pages/Basics.razor *@
+@page "/basics"
+@rendermode InteractiveServer
+
+<h3>Clicks: @clicks</h3>
+<button class="big" @onclick="Click">Click me</button>
+```
+
+```csharp
+// Components/Pages/Basics.razor.cs
+namespace WorkshopWeb.Components.Pages;
+
+public partial class Basics
+{
+    private int clicks;
+    private void Click() => clicks++;
+}
+```
+
+```css
+/* Components/Pages/Basics.razor.css */
+.big { font-size: 1.25rem; padding: 0.5rem 1rem; }
 ```
 
 ## Expected output or behaviour
 
-Logic, markup, and styles stay organized without leaking CSS globally.
+The counter increments on each click and only this page's button gets the larger style.
 
 ## Practice task
 
-What happens if CSS file name does not match component name?
+You get "The type Basics already contains a definition". What is missing?
 
 <details>
 <summary>Answer / check</summary>
 
-
-Isolation will not apply to that component because generated scope mapping will differ.
-
+The `partial` keyword on the code-behind class (or the namespace does not match the component's).
 
 </details>
 
-
 ## Next lesson
 
-- [33. Component Lifecycle and Async Loading](/lessons/enterprise-application-development/04-blazor-ui-building-blocks/05-component-lifecycle/)
+- [33. Component Lifecycle](../05-component-lifecycle/)

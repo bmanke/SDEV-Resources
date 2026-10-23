@@ -1,61 +1,78 @@
 ---
-title: "11. Music Catalogue Fixture"
-description: "This fixture provides runnable in-memory data for LINQ lessons when course databases are unavailable."
+title: "11. The Music Catalogue Fixture"
+description: "Create the in-memory data set every LINQ lesson uses."
 sidebar:
   order: 1
 ---
 
-**Estimated time:** 10 minutes
+**Estimated time:** 8 minutes
 
 ## Prerequisites
 
-- C# list and class basics.
+Lessons 1–5.
 
 ## Plain-language explanation
 
-This fixture provides runnable in-memory data for LINQ lessons when course databases are unavailable.
+Every LINQ lesson in this module runs against the same tiny, original catalogue so you can predict each result by hand. It has three artists, four albums and eight tracks, and it deliberately includes edge cases: an album with no label, an artist (Cobalt Sky) with no albums, two albums from the same year, and ties on price. These are the situations that trip up real queries.
 
 ## Focused example / procedure
 
 ```csharp
-public record Track(int Id, string Title, string Artist, string Genre, int Year, decimal Price, int AlbumId);
-public record Album(int Id, string Name, string Label);
+// Fixture.cs  (add to a new console project; implicit usings must be on)
+public record Artist(int Id, string Name);
+public record Album(int Id, int ArtistId, string Title, int Year, string? Label);
+public record Track(int Id, int AlbumId, string Title, string Genre, decimal Price, int Seconds);
 
-var albums = new List<Album>
+public static class Music
 {
-    new(1, "Northern Lights", "Aurora Records"),
-    new(2, "City Echoes", "Signal Works"),
-    new(3, "Prairie Drive", "Open Road Audio")
-};
+    public static readonly List<Artist> Artists = new()
+    {
+        new(1, "Aurora Vale"), new(2, "Brick Lane Trio"), new(3, "Cobalt Sky")
+    };
 
-var tracks = new List<Track>
-{
-    new(1, "Late Train", "Mara Cole", "Indie", 2021, 1.29m, 2),
-    new(2, "Glass River", "Aden Fox", "Ambient", 2020, 0.99m, 1),
-    new(3, "Sunlit Exit", "Mara Cole", "Indie", 2021, 1.29m, 2),
-    new(4, "Dustline", "R.K. Hale", "Country", 2019, 1.19m, 3),
-    new(5, "Signal Bloom", "Aden Fox", "Ambient", 2024, 1.49m, 1)
-};
+    public static readonly List<Album> Albums = new()
+    {
+        new(1, 1, "Northern Lights", 1998, "Polar"),
+        new(2, 1, "Glass Rivers",    2004, null),
+        new(3, 2, "Late Train",      1998, "Polar"),
+        new(4, 2, "Harbor Notes",    2021, "Tidewater")
+    };
+
+    public static readonly List<Track> Tracks = new()
+    {
+        new(1, 1, "Aurora",         "Pop",   0.99m, 210),
+        new(2, 1, "Ice Bloom",      "Pop",   0.99m, 245),
+        new(3, 2, "Glass",          "Indie", 1.29m, 198),
+        new(4, 2, "River Run",      "Indie", 1.29m, 305),
+        new(5, 3, "Late Train",     "Jazz",  0.99m, 402),
+        new(6, 3, "Night Platform", "Jazz",  1.29m, 355),
+        new(7, 4, "Harbor",         "Jazz",  1.29m, 280),
+        new(8, 4, "Tide Table",     "Indie", 0.99m, 190)
+    };
+}
+```
+
+```csharp
+// Program.cs
+foreach (var t in Music.Tracks)
+    Console.WriteLine($"{t.Id} {t.Title} ({t.Genre}) {t.Price:F2} {t.Seconds}s");
 ```
 
 ## Expected output or behaviour
 
-You have 3 albums and 5 tracks ready for every LINQ page in this module.
+Eight lines, from `1 Aurora (Pop) 0.99 210s` to `8 Tide Table (Indie) 0.99 190s`. Later lessons begin with `var tracks = Music.Tracks;`.
 
 ## Practice task
 
-Add one Jazz track and rerun future examples.
+Which artist has no albums, and why is that useful for testing?
 
 <details>
 <summary>Answer / check</summary>
 
-
-Create a new `Track` with `Genre = "Jazz"` and a valid `AlbumId`.
-
+Cobalt Sky. A query that joins or nests children must still return the artist with an empty list; code that assumes at least one child breaks on this row.
 
 </details>
 
-
 ## Next lesson
 
-- [12. Lambdas and Where](/lessons/enterprise-application-development/03-linq-with-music-catalogue/02-lambdas-and-where/)
+- [12. Lambdas and Where](../02-lambdas-and-where/)

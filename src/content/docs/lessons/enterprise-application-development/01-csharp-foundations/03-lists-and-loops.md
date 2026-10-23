@@ -1,6 +1,6 @@
 ---
 title: "3. Lists and Loops"
-description: "A `List<T>` stores a dynamic collection."
+description: "Store several values in a List<T> and visit each one with foreach and for."
 sidebar:
   order: 3
 ---
@@ -9,41 +9,47 @@ sidebar:
 
 ## Prerequisites
 
-- Lessons 1–2.
+Lesson 2.
 
 ## Plain-language explanation
 
-A `List<T>` stores a dynamic collection. `for` is useful when you need index positions, while `foreach` is simpler for read-only iteration.
+`List<T>` is a resizable collection where every item has the same type. `foreach` is the simplest way to visit every item when you do not need its position. Use `for` when you need the index, for example to number a list. Never add to or remove from a list while a `foreach` is walking it: the loop will throw because the collection changed underneath it.
 
 ## Focused example / procedure
 
 ```csharp
-List<string> parts = ["Brake pad", "Oil filter", "Wiper blade"];
+List<string> parts = new() { "Chain", "Brake pads" };
+parts.Add("Tyre");
+
+foreach (string part in parts)
+    Console.WriteLine(part);
 
 for (int i = 0; i < parts.Count; i++)
-{
-    Console.WriteLine($"{i + 1}. {parts[i]}");
-}
+    Console.WriteLine($"{i + 1}: {parts[i]}");
 ```
 
 ## Expected output or behaviour
 
-The list prints in order with one-based numbering.
+```
+Chain
+Brake pads
+Tyre
+1: Chain
+2: Brake pads
+3: Tyre
+```
 
 ## Practice task
 
-Print only items containing the word "Oil" using `foreach`.
+Print only the parts whose name is longer than 5 characters, using `foreach` and an `if`.
 
 <details>
 <summary>Answer / check</summary>
 
-
-`foreach (var part in parts) if (part.Contains("Oil")) Console.WriteLine(part);`
-
+`foreach (var p in parts) { if (p.Length > 5) Console.WriteLine(p); }` prints `Brake pads`. Lesson 12 shows the same idea with LINQ's `Where`.
 
 </details>
 
-
 ## Next lesson
 
-- [4. Methods for Reuse](/lessons/enterprise-application-development/01-csharp-foundations/04-methods/)
+- [4. Methods](../04-methods/)

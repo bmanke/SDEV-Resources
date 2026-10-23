@@ -1,47 +1,62 @@
 ---
-title: "22. GroupBy with Composite Keys and Aggregate Filtering"
-description: "Group with one or multiple keys, then filter groups by computed aggregates (SQL HAVING equivalent)."
+title: "22. GroupBy: Composite Keys and Filtering Groups"
+description: "Group by one or more keys and keep only groups that qualify."
 sidebar:
   order: 12
 ---
 
-**Estimated time:** 8 minutes
+**Estimated time:** 9 minutes
 
 ## Prerequisites
 
-- Lessons 14 and 21.
+Lesson 21.
 
 ## Plain-language explanation
 
-Group with one or multiple keys, then filter groups by computed aggregates (SQL HAVING equivalent).
+`GroupBy` splits a sequence into groups; each group has a `Key` and the items that share it. Group by an anonymous object to use several columns as a composite key. Filtering on a group's aggregate with `Where(g => g.Count() >= 2)` is the LINQ version of SQL's `HAVING`. Group by a stable identifier (like an `Id`) rather than a name when two different items can share a name; otherwise they get merged.
 
 ## Focused example / procedure
 
 ```csharp
-var groups = tracks
-    .GroupBy(t => new { t.Genre, t.Year })
-    .Select(g => new { g.Key.Genre, g.Key.Year, Count = g.Count() })
-    .Where(g => g.Count >= 2);
+var tracks = Music.Tracks;
+
+var byGenre = tracks
+    .GroupBy(t => t.Genre)
+    .OrderBy(g => g.Key)
+    .Select(g => new { Genre = g.Key, Count = g.Count(), Avg = g.Average(t => t.Price) });
+foreach (var x in byGenre)
+    Console.WriteLine($"{x.Genre}: {x.Count} tracks, avg {x.Avg:F2}");
+
+var repeated = tracks
+    .GroupBy(t => new { t.Genre, t.Price })
+    .Where(g => g.Count() >= 2)
+    .OrderBy(g => g.Key.Genre).ThenBy(g => g.Key.Price)
+    .Select(g => $"{g.Key.Genre} {g.Key.Price:F2}: {g.Count()}");
+foreach (var line in repeated) Console.WriteLine(line);
 ```
 
 ## Expected output or behaviour
 
-Only genre-year groups with at least 2 tracks remain.
+```
+Indie: 3 tracks, avg 1.19
+Jazz: 3 tracks, avg 1.19
+Pop: 2 tracks, avg 0.99
+Indie 1.29: 2
+Jazz 1.29: 2
+Pop 0.99: 2
+```
 
 ## Practice task
 
-Group by artist only and keep artists with total revenue > 2.00.
+How many tracks are in each (Genre, Price) group that has only one track?
 
 <details>
 <summary>Answer / check</summary>
 
-
-Group by `t.Artist`, sum `t.Price`, then filter with `> 2.00m`.
-
+Those are Indie 0.99 (Tide Table) and Jazz 0.99 (Late Train): one track each, removed by the `Count() >= 2` filter.
 
 </details>
 
-
 ## Next lesson
 
-- [23. Deferred Execution and ToList](/lessons/enterprise-application-development/03-linq-with-music-catalogue/13-deferred-execution-and-tolist/)
+- [23. Deferred Execution and ToList](../13-deferred-execution-and-tolist/)

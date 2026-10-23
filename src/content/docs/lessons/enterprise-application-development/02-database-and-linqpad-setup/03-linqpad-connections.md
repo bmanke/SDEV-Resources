@@ -1,46 +1,48 @@
 ---
 title: "9. LINQPad Connections"
-description: "Create explicit connections so queries run against the intended database."
+description: "Point LINQPad at the practice database so you can run queries against it."
 sidebar:
   order: 3
 ---
 
-**Estimated time:** 7 minutes
+**Estimated time:** 8 minutes
 
 ## Prerequisites
 
-- Lesson 8 and LINQPad installed.
+Lesson 8 and LINQPad installed.
 
 ## Plain-language explanation
 
-Create explicit connections so queries run against the intended database. Label connections with environment suffixes like `-Teaching`.
+LINQPad is a scratch pad for C# and LINQ. A connection tells it which server and database to read, and it then builds a data context so table names such as `Customers` become queries you can type. The classroom path starts with the default driver and later uses an Entity Framework connection, so the queries you prototype match the EF code in your application.
 
 ## Focused example / procedure
 
-```text
-Connection name: WorkshopTeaching (local)
-Provider: SQL Server
-Database: WorkshopTeaching_20261023
+1. In LINQPad choose **Add connection**.
+2. Keep the default driver unless your instructor asks for the EF Core driver.
+3. Set **Server** to `.` (or `(localdb)\MSSQLLocalDB`).
+4. Choose **Specify new or existing database** and pick `Teaching_Practice`.
+5. Click **Test**, then **OK**.
+6. Open a new query, select the connection in the toolbar and run this in **C# Expression** mode:
+
+```csharp
+Customers.Count()
 ```
 
 ## Expected output or behaviour
 
-Running a basic table query returns local teaching data and not an unintended server.
+A number equal to the row count of your `Customers` table (your table name may differ).
 
 ## Practice task
 
-Create a second connection for an empty scratch database and explain why it helps.
+The test fails with "cannot open database". Name two things to check.
 
 <details>
 <summary>Answer / check</summary>
 
-
-A scratch DB lets you test destructive queries safely without touching fixture data.
-
+That the server name is right and SQL Server is running, and that the database name exactly matches the one you imported (check `sys.databases`).
 
 </details>
 
-
 ## Next lesson
 
-- [10. LINQPad Expression, Statements, and Program Modes](/lessons/enterprise-application-development/02-database-and-linqpad-setup/04-linqpad-execution-modes/)
+- [10. LINQPad Execution Modes](../04-linqpad-execution-modes/)

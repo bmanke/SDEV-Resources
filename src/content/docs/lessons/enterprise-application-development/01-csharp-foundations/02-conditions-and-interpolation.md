@@ -1,54 +1,52 @@
 ---
-title: "2. Conditions and String Interpolation"
-description: "`if/else` branches behavior, while interpolation keeps output readable."
+title: "2. Conditions and Interpolation"
+description: "Branch with if/else and the conditional operator, and format numbers in text."
 sidebar:
   order: 2
 ---
 
-**Estimated time:** 7 minutes
+**Estimated time:** 6 minutes
 
 ## Prerequisites
 
-- Lesson 1.
+Lesson 1.
 
 ## Plain-language explanation
 
-`if/else` branches behavior, while interpolation keeps output readable. Use ternary only for short, single-decision expressions.
+`if`/`else` runs one block or another depending on a `bool` expression. The conditional (ternary) operator `condition ? a : b` is the expression form: use it when you only need to pick one of two values. Inside an interpolated string, a format specifier after a colon controls presentation, so `{total:F2}` shows two decimal places. Formatting only changes how a value is displayed; it does not change the stored value.
 
 ## Focused example / procedure
 
 ```csharp
-int stock = 0;
-string state = stock > 0 ? "In stock" : "Out of stock";
+decimal total = 120.456m;
 
-if (stock == 0)
-{
-    Console.WriteLine($"Status: {state}. Reorder today.");
-}
+if (total > 100m)
+    Console.WriteLine("Free shipping");
 else
-{
-    Console.WriteLine($"Status: {state}. Sell normally.");
-}
+    Console.WriteLine("Standard shipping");
+
+string tier = total >= 100m ? "Preferred" : "Standard";
+Console.WriteLine($"Total {total:F2} ({tier})");
 ```
 
 ## Expected output or behaviour
 
-With `stock = 0`, output says reorder today. Changing `stock` to a positive number changes branch text.
+```
+Free shipping
+Total 120.46 (Preferred)
+```
 
 ## Practice task
 
-Show "Low stock" for values from 1 to 5 and "Healthy stock" above 5.
+Add a third tier, `"Platinum"`, for totals of 500 or more. Use two nested conditional operators.
 
 <details>
 <summary>Answer / check</summary>
 
-
-Use `if (stock == 0)`, `else if (stock <= 5)`, then `else`.
-
+`string tier = total >= 500m ? "Platinum" : total >= 100m ? "Preferred" : "Standard";`. Order matters: test the largest threshold first, or every large total would match the first condition.
 
 </details>
 
-
 ## Next lesson
 
-- [3. Lists and Loops](/lessons/enterprise-application-development/01-csharp-foundations/03-lists-and-loops/)
+- [3. Lists and Loops](../03-lists-and-loops/)
