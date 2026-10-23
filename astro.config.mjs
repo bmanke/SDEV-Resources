@@ -77,6 +77,10 @@ export default defineConfig({
 							label: 'Rapid Backend Development',
 							items: [{ autogenerate: { directory: 'lessons/rapid-backend-development' } }],
 						},
+						{
+							label: 'Enterprise Application Development',
+							items: [{ autogenerate: { directory: 'lessons/enterprise-application-development' } }],
+						},
 					],
 				},
 				{
