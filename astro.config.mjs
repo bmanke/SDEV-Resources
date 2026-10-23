@@ -104,10 +104,6 @@ export default defineConfig({
 									label: 'State, Checkout and Security',
 									items: [{ autogenerate: { directory: 'lessons/enterprise-application-development/06-state-checkout-and-security' } }],
 								},
-								{
-									label: 'C# Basics and Blazor (optional)',
-									slug: 'lessons/enterprise-application-development/csharp-basics-and-blazor',
-								},
 							],
 						},
 					],
