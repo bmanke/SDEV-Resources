@@ -1,9 +1,11 @@
 ---
-title: "C# Basics and Blazor in Visual Studio"
-description: "Learn core C# syntax and build a beginner Blazor task page in Visual Studio with server interactivity and validation."
+title: "Optional Reference: C# Basics and Blazor in Visual Studio"
+description: "Optional long-form reference for core C# syntax and a beginner Blazor task page."
 sidebar:
-  order: 1
+  order: 999
 ---
+
+> This page is retained as optional background reference. The primary learning path is the bite-sized module sequence in this course section.
 
 This lesson introduces practical C# basics and then applies them in a small Blazor Web App page built in Visual Studio on Windows.
 
