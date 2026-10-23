@@ -242,6 +242,8 @@ Create `Components/Pages/Tasks.razor`:
 ```razor title="Components/Pages/Tasks.razor"
 @page "/tasks"
 @rendermode InteractiveServer
+@using System.Collections.Generic
+@using System.Linq
 @using EnterpriseTasks.Models
 @using Microsoft.AspNetCore.Components.Forms
 
