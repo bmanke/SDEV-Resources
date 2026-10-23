@@ -4,6 +4,7 @@ description: "Learn modern Blazor Web App (Interactive Server) component fundame
 sidebar:
   label: "Blazor UI Building Blocks"
   order: 4
+  hidden: true
 ---
 
 Learn modern Blazor Web App (Interactive Server) component fundamentals.

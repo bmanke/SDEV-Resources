@@ -79,7 +79,36 @@ export default defineConfig({
 						},
 						{
 							label: 'Enterprise Application Development',
-							items: [{ autogenerate: { directory: 'lessons/enterprise-application-development' } }],
+							items: [
+								{
+									label: 'C# Foundations',
+									items: [{ autogenerate: { directory: 'lessons/enterprise-application-development/01-csharp-foundations' } }],
+								},
+								{
+									label: 'Database and LINQPad Setup',
+									items: [{ autogenerate: { directory: 'lessons/enterprise-application-development/02-database-and-linqpad-setup' } }],
+								},
+								{
+									label: 'LINQ with the Music Catalogue',
+									items: [{ autogenerate: { directory: 'lessons/enterprise-application-development/03-linq-with-music-catalogue' } }],
+								},
+								{
+									label: 'Blazor UI Building Blocks',
+									items: [{ autogenerate: { directory: 'lessons/enterprise-application-development/04-blazor-ui-building-blocks' } }],
+								},
+								{
+									label: 'Workshop Domain and Rules',
+									items: [{ autogenerate: { directory: 'lessons/enterprise-application-development/05-workshop-domain-and-rules' } }],
+								},
+								{
+									label: 'State, Checkout and Security',
+									items: [{ autogenerate: { directory: 'lessons/enterprise-application-development/06-state-checkout-and-security' } }],
+								},
+								{
+									label: 'C# Basics and Blazor (optional)',
+									slug: 'lessons/enterprise-application-development/csharp-basics-and-blazor',
+								},
+							],
 						},
 					],
 				},
