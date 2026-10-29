@@ -110,7 +110,43 @@ export default defineConfig({
 				},
 				{
 					label: 'Resources',
-					items: [{ autogenerate: { directory: 'resources' } }],
+					items: [
+						{ autogenerate: { directory: 'resources' } },
+						{
+							label: 'JavaScript vs TypeScript',
+							collapsed: true,
+							items: [
+								{
+									label: 'Same Language, Extra Layer',
+									items: [{ autogenerate: { directory: 'typescript-course/01-same-language-extra-layer' } }],
+								},
+								{
+									label: 'Types You Write and Infer',
+									items: [{ autogenerate: { directory: 'typescript-course/02-types-you-write-and-infer' } }],
+								},
+								{
+									label: 'Describing Shapes',
+									items: [{ autogenerate: { directory: 'typescript-course/03-describing-shapes' } }],
+								},
+								{
+									label: 'Functions and Null Safety',
+									items: [{ autogenerate: { directory: 'typescript-course/04-functions-and-null-safety' } }],
+								},
+								{
+									label: 'Reusable Types',
+									items: [{ autogenerate: { directory: 'typescript-course/05-reusable-types' } }],
+								},
+								{
+									label: 'Tooling and Migration',
+									items: [{ autogenerate: { directory: 'typescript-course/06-tooling-and-migration' } }],
+								},
+								{
+									label: 'Capstone',
+									items: [{ autogenerate: { directory: 'typescript-course/07-capstone' } }],
+								},
+							],
+						},
+					],
 				},
 				{ label: 'Changelog', slug: 'changelog' },
 			],
